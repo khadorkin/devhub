@@ -1,4 +1,5 @@
 import axios from 'axios'
+import immer from 'immer'
 import _ from 'lodash'
 
 import {
@@ -11,19 +12,28 @@ import {
   GitHubStateType,
   IssueOrPullRequestColumnSubscription,
   IssueOrPullRequestPayloadEnhancement,
-  Omit,
+  UserPlan,
 } from '../../types'
+import { constants } from '../../utils'
 import {
   filterRecordHasAnyForcedValue,
   itemPassesFilterRecord,
 } from '../filters'
+import { isPlanStatusValid } from '../plans'
+import { getSearchQueryTerms, isIssueOrPullRequestPrivate } from '../shared'
 import {
   getIssueIconAndColor,
   getOwnerAndRepo,
   getPullRequestIconAndColor,
+  isItemRead,
+  isItemSaved,
   isPullRequest,
 } from './shared'
-import { getRepoFullNameFromUrl } from './url'
+import {
+  getBaseAPIUrlFromOtherAPIUrl,
+  getRepoFullNameFromUrl,
+  getRepoUrlFromOtherUrl,
+} from './url'
 
 export const issueOrPullRequestSubjectTypes: GitHubIssueOrPullRequestSubjectType[] = [
   'Issue',
@@ -67,9 +77,6 @@ export function mergeIssueOrPullRequestPreservingEnhancement(
 ) {
   if (!(newItem && existingItem)) return newItem || existingItem
 
-  delete newItem.last_read_at
-  delete newItem.last_unread_at
-
   const enhancements: Record<
     keyof Omit<
       EnhancedGitHubIssueOrPullRequest,
@@ -78,28 +85,43 @@ export function mergeIssueOrPullRequestPreservingEnhancement(
     any
   > = {
     enhanced: existingItem.enhanced,
-    forceUnreadLocally: existingItem.forceUnreadLocally,
     last_read_at: _.max([existingItem.last_read_at, newItem.last_read_at]),
+    last_saved_at: _.max([existingItem.last_saved_at, newItem.last_saved_at]),
     last_unread_at: _.max([
       existingItem.last_unread_at,
       newItem.last_unread_at,
     ]),
+    last_unsaved_at: _.max([
+      existingItem.last_unsaved_at,
+      newItem.last_unsaved_at,
+    ]),
     merged: existingItem.merged,
-    saved: existingItem.saved,
-    unread: existingItem.unread,
+    private: existingItem.private,
   }
 
-  const mergedItem: EnhancedGitHubIssueOrPullRequest = {
-    ...enhancements,
-    ...newItem,
-    updated_at: _.max([existingItem.updated_at, newItem.updated_at])!,
-  }
+  return immer(newItem, draft => {
+    Object.entries(enhancements).forEach(([key, value]) => {
+      if (typeof value === 'undefined') return
+      if (value === (draft as any)[key])
+        return // if (typeof (draft as any)[key] !== 'undefined') return
+      ;(draft as any)[key] = value
+    })
 
-  return _.isEqual(mergedItem, existingItem) ? existingItem : mergedItem
+    draft.updated_at = _.max([existingItem.updated_at, newItem.updated_at])!
+  })
 }
 
 export function getIssueOrPullRequestState(
-  item: GitHubIssueOrPullRequest | undefined,
+  item:
+    | {
+        state?: GitHubIssueOrPullRequest['state']
+        pull_request?: object
+        merged?: GitHubPullRequest['merged']
+        merged_at?: GitHubPullRequest['merged_at']
+        html_url?: GitHubPullRequest['html_url']
+        url?: GitHubPullRequest['url']
+      }
+    | undefined,
 ): GitHubStateType | null {
   if (!item) return null
 
@@ -123,15 +145,31 @@ export function getIssueOrPullRequestSubjectType(
   if (item.html_url && item.html_url.includes('/pull/')) return 'PullRequest'
   if (item.url && item.url.includes('/pulls/')) return 'PullRequest'
 
-  return 'Issue'
+  if (item.html_url && item.html_url.includes('/issues/')) return 'Issue'
+  if (item.url && item.url.includes('/issues/')) return 'Issue'
+
+  return null
 }
 
-export function getOlderIssueOrPullRequestDate(
-  events: EnhancedGitHubIssueOrPullRequest[],
-  field: keyof EnhancedGitHubIssueOrPullRequest = 'updated_at',
-) {
-  const olderItem = sortIssuesOrPullRequests(events, field, 'desc').pop()
-  return olderItem && olderItem[field]
+export function getOlderOrNewerIssueOrPullRequestDate(
+  order: 'newer' | 'older',
+  items: EnhancedGitHubIssueOrPullRequest[] | undefined,
+  {
+    field = 'updated_at',
+    ignoreFutureDates = true,
+  }: { field?: 'created_at' | 'updated_at'; ignoreFutureDates?: boolean } = {},
+): string | undefined {
+  const now = Date.now()
+  return sortIssuesOrPullRequests(
+    items,
+    field,
+    order === 'newer' ? 'desc' : 'asc',
+  )
+    .map(item => item[field])
+    .filter(
+      date =>
+        !!(date && ignoreFutureDates ? now > new Date(date).getTime() : true),
+    )[0]
 }
 
 export function createIssuesOrPullRequestsCache(
@@ -159,32 +197,94 @@ export async function getIssueOrPullRequestsEnhancementMap(
   items: EnhancedGitHubIssueOrPullRequest[],
   {
     cache = new Map(),
-    getGitHubInstallationTokenForRepo,
-    githubOAuthToken,
+    getGitHubPrivateTokenForRepo,
+    githubToken: _githubToken,
   }: {
     cache: EnhancementCache | undefined | undefined
-    getGitHubInstallationTokenForRepo: (
+    getGitHubPrivateTokenForRepo: (
       owner: string | undefined,
       repo: string | undefined,
     ) => string | undefined
-    githubOAuthToken: string
+    githubToken: string
   },
 ): Promise<Record<string, IssueOrPullRequestPayloadEnhancement>> {
+  const repoMetas = _.uniqBy(
+    items
+      .map(item => {
+        const repoURL = getRepoUrlFromOtherUrl(
+          item && (item.repository_url || item.url),
+        )
+
+        const { owner, repo } = getOwnerAndRepo(
+          getRepoFullNameFromUrl(repoURL || ''),
+        )
+
+        let repoAPIURL = getBaseAPIUrlFromOtherAPIUrl(item && item.url)
+        if (repoAPIURL && owner && repo)
+          repoAPIURL = `${repoAPIURL}/repos/${owner}/${repo}`
+
+        return { repoURL, repoAPIURL, owner, repo }
+      })
+      .filter(
+        meta =>
+          !!(
+            meta &&
+            meta.owner &&
+            meta.repo &&
+            meta.repoAPIURL &&
+            meta.repoURL
+          ),
+      ),
+    'repoAPIURL',
+  )
+
+  const repoPromises = repoMetas.map(
+    async ({ repoURL, repoAPIURL, owner, repo }) => {
+      const cacheValue = cache.get(repoURL!)
+      if (cacheValue && Date.now() - cacheValue.timestamp < 1000 * 60 * 60)
+        return cacheValue
+
+      const privateToken = getGitHubPrivateTokenForRepo(owner, repo)
+      const githubToken = privateToken || _githubToken
+
+      try {
+        const { data } = await axios.get(repoAPIURL!, {
+          headers: {
+            Authorization: githubToken && `token ${githubToken}`,
+          },
+        })
+        cache.set(repoURL!, { data, timestamp: Date.now() })
+      } catch (error) {
+        console.error('Failed to load repository.', repoAPIURL, repoURL, error)
+        cache.set(repoURL!, false)
+      }
+    },
+  )
+
+  await Promise.all(repoPromises)
+
   const promises = items.map(async item => {
-    const repoFullName = getRepoFullNameFromUrl(
+    const repoURL = getRepoUrlFromOtherUrl(
       item && (item.repository_url || item.url),
-    )
+    )!
+
+    const repoFullName = getRepoFullNameFromUrl(repoURL)
     const { owner, repo } = getOwnerAndRepo(repoFullName)
     if (!(owner && repo && item.number && item.url)) return
 
-    const installationToken = getGitHubInstallationTokenForRepo(owner, repo)
-    const githubToken = installationToken || githubOAuthToken
+    const privateToken = getGitHubPrivateTokenForRepo(owner, repo)
+    const githubToken = privateToken || _githubToken
 
     const enhance: IssueOrPullRequestPayloadEnhancement = {}
 
     const mergeUrl = `${item.url.replace('/issues/', '/pulls/')}/merge`
     const hasMergedCache = cache.has(mergeUrl)
     const mergedCache = cache.get(mergeUrl)
+
+    const repoCacheValue = cache.get(repoURL)
+    if (repoCacheValue && repoCacheValue.data) {
+      enhance.private = repoCacheValue.data.private
+    }
 
     if (
       getIssueOrPullRequestSubjectType(item) === 'PullRequest' &&
@@ -194,12 +294,12 @@ export async function getIssueOrPullRequestsEnhancementMap(
           new Date(item.updated_at).valueOf() > mergedCache.timestamp))
     ) {
       try {
-        const { status } = await axios.get(
-          `${mergeUrl}?access_token=${githubToken}`,
-          {
-            validateStatus: s => s === 204 || s === 404,
+        const { status } = await axios.get(mergeUrl, {
+          headers: {
+            Authorization: githubToken && `token ${githubToken}`,
           },
-        )
+          validateStatus: s => s === 204 || s === 404,
+        })
 
         enhance.merged = status === 204
         enhance.enhanced = true
@@ -246,6 +346,8 @@ export function enhanceIssueOrPullRequests(
   enhancementMap: Record<string, IssueOrPullRequestPayloadEnhancement>,
   currentEnhancedIssueOrPullRequests: EnhancedGitHubIssueOrPullRequest[] = [],
 ) {
+  if (!(items && items.length)) return constants.EMPTY_ARRAY
+
   return items.map(item => {
     const enhanced = currentEnhancedIssueOrPullRequests.find(
       i => i.id === item.id,
@@ -265,12 +367,13 @@ export function enhanceIssueOrPullRequests(
 }
 
 export function sortIssuesOrPullRequests(
-  events: EnhancedGitHubIssueOrPullRequest[] | undefined,
+  items: EnhancedGitHubIssueOrPullRequest[] | undefined,
   field: keyof EnhancedGitHubIssueOrPullRequest = 'updated_at',
   order: 'asc' | 'desc' = 'desc',
 ) {
-  if (!events) return []
-  return _(events)
+  if (!(items && items.length)) return constants.EMPTY_ARRAY
+
+  return _(items)
     .uniqBy('id')
     .orderBy(field, order)
     .value()
@@ -278,19 +381,87 @@ export function sortIssuesOrPullRequests(
 
 export function getGitHubIssueSearchQuery(
   params: IssueOrPullRequestColumnSubscription['params'],
+  includeDefaultSorting: boolean = true,
 ) {
-  const queryArr: string[] = []
+  const queries: string[] = []
 
-  const { draft, repoFullName, state, subjectType } = params
+  const { draft, involves, owners, state, subjectType, query } = params
 
-  if (repoFullName) queryArr.push(`repo:${repoFullName}`)
+  if (query) {
+    const termsToSearchFor = getSearchQueryTerms(query)
 
-  if (subjectType === 'Issue') queryArr.push('is:issue')
-  else if (subjectType === 'PullRequest') queryArr.push('is:pr')
+    const convertedQuery = termsToSearchFor
+      .map(queryTerm => {
+        if (
+          !(
+            queryTerm &&
+            Array.isArray(queryTerm) &&
+            (queryTerm.length === 2 || queryTerm.length === 3)
+          )
+        )
+          return ''
+
+        const [key, _value, isNegated] =
+          queryTerm.length === 2 ? ['', queryTerm[0], queryTerm[1]] : queryTerm
+        if (!(_value && typeof _value === 'string')) return false
+        const value =
+          _value.includes(' ') && _value[0] !== '"' ? `"${_value}"` : _value
+
+        const searchTerm = key
+          ? `${key}:${value}`
+          : value.match(/^#([0-9]+)$/) && value.match(/^#([0-9]+)$/)![1]
+          ? value.match(/^#([0-9]+)$/)![1]!
+          : value
+
+        return isNegated
+          ? key
+            ? `-${searchTerm}`
+            : `NOT ${searchTerm}`
+          : searchTerm
+      })
+      .filter(Boolean)
+      .join(' ')
+
+    queries.push(convertedQuery)
+  }
+
+  if (owners) {
+    Object.entries(owners || {}).forEach(([owner, ownerFilter]) => {
+      if (!(owner && ownerFilter)) return
+
+      const reposToPush: string[] = []
+      Object.entries(ownerFilter.repos || {}).forEach(
+        ([repo, repoFilterValue]) => {
+          if (!(repo && repoFilterValue === true)) return
+
+          const repoFullName = `${owner}/${repo}`.toLowerCase()
+          reposToPush.push(repoFullName)
+        },
+      )
+
+      if (ownerFilter.value === true && !reposToPush.length)
+        queries.push(`user:${owner}`.toLowerCase())
+
+      reposToPush.forEach(repoFullName => queries.push(`repo:${repoFullName}`))
+    })
+  }
+
+  if (involves && filterRecordHasAnyForcedValue(involves)) {
+    Object.entries(involves).forEach(([_user, value]) => {
+      const user = `${_user || ''}`.trim().toLowerCase()
+      if (!(user && typeof value === 'boolean')) return
+
+      const negationSign = !value ? '-' : ''
+      queries.push(`${negationSign}involves:${user}`)
+    })
+  }
+
+  if (subjectType === 'Issue') queries.push('is:issue')
+  else if (subjectType === 'PullRequest') queries.push('is:pr')
 
   if (typeof draft === 'boolean') {
-    if (draft) queryArr.push('is:draft')
-    else queryArr.push('-is:draft')
+    if (draft) queries.push('is:draft')
+    else queries.push('-is:draft')
   }
 
   if (state && filterRecordHasAnyForcedValue(state)) {
@@ -302,37 +473,37 @@ export function getGitHubIssueSearchQuery(
     switch (includesExactly) {
       // 001
       case 'merged': {
-        queryArr.push('is:merged')
+        queries.push('is:merged')
         break
       }
 
       // 010
       case 'closed': {
-        queryArr.push('state:closed')
+        queries.push('state:closed')
         break
       }
 
       // 011
       case 'closed,merged': {
-        queryArr.push('-state:open')
+        queries.push('-state:open')
         break
       }
 
       // 100
       case 'open': {
-        queryArr.push('state:open')
+        queries.push('state:open')
         break
       }
 
       // 101 (NOT POSSIBLE ON GITHUB)
       // case 'open,merged': {
-      //   queryArr.push('is:merged')
+      //   queries.push('is:merged')
       //   break
       // }
 
       // 110 (NOT POSSIBLE ON GITHUB)
       // case 'open,closed': {
-      //   queryArr.push('is:unmerged')
+      //   queries.push('is:unmerged')
       //   break
       // }
 
@@ -344,5 +515,65 @@ export function getGitHubIssueSearchQuery(
     }
   }
 
-  return queryArr.join(' ')
+  if (includeDefaultSorting) {
+    const searchTerms = getSearchQueryTerms(query)
+    if (
+      !searchTerms.find(
+        searchTerm =>
+          searchTerm &&
+          Array.isArray(searchTerm) &&
+          searchTerm.length === 3 &&
+          searchTerm[0] === 'sort',
+      )
+    ) {
+      queries.push('sort:updated-desc')
+    }
+  }
+
+  return queries.join(' ')
+}
+
+export function getGitHubIssueOrPullRequestSubItems(
+  issueOrPullRequest: EnhancedGitHubIssueOrPullRequest,
+  { plan }: { plan: UserPlan | null | undefined },
+) {
+  const repoURL = getRepoUrlFromOtherUrl(
+    issueOrPullRequest.repository_url ||
+      issueOrPullRequest.url ||
+      issueOrPullRequest.html_url,
+  )
+
+  const repoFullName = repoURL && getRepoFullNameFromUrl(repoURL)
+  const { owner: repoOwnerName, repo: repoName } = getOwnerAndRepo(
+    repoFullName || '',
+  )
+
+  const iconDetails = getIssueOrPullRequestIconAndColor(
+    getIssueOrPullRequestSubjectType(issueOrPullRequest) || 'Issue',
+    issueOrPullRequest,
+  )
+
+  const isRead = isItemRead(issueOrPullRequest)
+  const isSaved = isItemSaved(issueOrPullRequest)
+  const isPrivate = isIssueOrPullRequestPrivate(issueOrPullRequest)
+
+  const canSee =
+    !isPrivate ||
+    !!(
+      plan &&
+      isPlanStatusValid(plan) &&
+      plan.featureFlags.enablePrivateRepositories
+    )
+
+  return {
+    canSee,
+    iconDetails,
+    isPrivate,
+    isRead,
+    isSaved,
+    repoFullName,
+    repoName,
+    repoOwnerName,
+    repoURL,
+  }
 }

@@ -1,16 +1,25 @@
-import immer from 'immer'
-
 import {
   ActivityColumn,
   Column,
   ColumnSubscription,
+  DevHubDataItemType,
+  EnhancedItem,
   filterRecordHasAnyForcedValue,
   getEventMetadata,
+  getItemNodeIdOrId,
+  getOwnerAndRepo,
   GitHubEvent,
   GraphQLGitHubUser,
   guid,
+  isItemRead,
+  isItemSaved,
+  IssueOrPullRequestColumnSubscription,
+  NotificationColumn,
   removeUselessURLsFromResponseItem,
 } from '@devhub/core'
+import immer from 'immer'
+import _ from 'lodash'
+
 import * as selectors from './selectors'
 import { RootState } from './types'
 
@@ -18,7 +27,7 @@ export default {
   0: (state: any) => state,
   1: (state: any) => state,
   2: (state: any) =>
-    immer(state, draft => {
+    immer(state, (draft: any) => {
       const columns: Column[] = draft.columns && draft.columns.columns
       if (!columns) return
 
@@ -56,6 +65,7 @@ export default {
           id: oldColumn.id,
           type: oldColumn.type,
           subscriptionIds: [subscription.id],
+          subscriptionIdsHistory: [subscription.id],
           createdAt: oldColumn.createdAt || new Date().toISOString(),
           updatedAt: oldColumn.updatedAt || new Date().toISOString(),
         }
@@ -112,7 +122,7 @@ export default {
 
       const byId: Record<string, ColumnSubscription | undefined> = {}
 
-      selectors.subscriptionsArrSelector(draft).forEach(subscription => {
+      selectors.allSubscriptionsArrSelector(draft).forEach(subscription => {
         const {
           data: items,
           loadState,
@@ -144,18 +154,17 @@ export default {
       draft.subscriptions.allIds = draft.subscriptions.allIds || []
       draft.subscriptions.byId = draft.subscriptions.byId || {}
 
-      selectors.subscriptionsArrSelector(draft).forEach(subscription => {
+      selectors.allSubscriptionsArrSelector(draft).forEach(subscription => {
         if (
           !(
             subscription &&
             subscription.data &&
-            subscription.data.items &&
-            subscription.data.items.length
+            (subscription.data as any).items &&
+            (subscription.data as any).items.length
           )
         )
           return
-
-        subscription.data.items = (subscription.data.items as any[]).map(
+        ;(subscription.data as any).items = (subscription.data as any).map(
           removeUselessURLsFromResponseItem,
         )
       })
@@ -209,19 +218,19 @@ export default {
       }
 
       if (!auth.user) return
-
-      draft.auth.user = {
+      ;(draft.auth as any).user = {
         _id: auth.user._id,
         createdAt: auth.user.createdAt,
         lastLoginAt: auth.user.lastLoginAt,
         updatedAt: auth.user.updatedAt,
-      }
+      } as typeof auth['user']
 
       if (!(auth.user.github && auth.user.github.token)) return
       draft.github = draft.github || {}
       draft.github.auth = draft.github.auth || {}
 
       draft.github.auth.oauth = {
+        login: '',
         scope: auth.user.github.scope,
         token: auth.user.github.token,
         tokenCreatedAt: auth.user.github.tokenCreatedAt!,
@@ -232,9 +241,8 @@ export default {
   9: (state: RootState) =>
     immer(state, draft => {
       draft.config = draft.config || {}
-
-      draft.config.appViewMode =
-        draft.config.appViewMode === 'single-column'
+      ;(draft.config as any).appViewMode =
+        (draft.config as any).appViewMode === 'single-column'
           ? 'single-column'
           : 'multi-column'
     }),
@@ -330,6 +338,226 @@ export default {
           Repository: true,
           Tag: true,
           User: true,
+        }
+      })
+    }),
+  12: (state: RootState) =>
+    immer(state, draft => {
+      draft.subscriptions = draft.subscriptions || {}
+      draft.subscriptions.byId = draft.subscriptions.byId || {}
+
+      const subscriptionIds = Object.keys(draft.subscriptions.byId)
+      subscriptionIds.forEach(subscriptionId => {
+        const subscription = draft.subscriptions.byId![subscriptionId]
+
+        // we only wanna change Issues & PRs columns
+        if (!(subscription && subscription.type === 'issue_or_pr')) return
+
+        const s = subscription as IssueOrPullRequestColumnSubscription
+        s.params = s.params || {}
+
+        const subscriptionParams = s.params as ({
+          repoFullName?: string
+          owners?: Partial<
+            Record<
+              string,
+              {
+                value: boolean | undefined
+                repos: Partial<Record<string, boolean>> | undefined
+              }
+            >
+          >
+        })
+
+        if (!subscriptionParams.repoFullName) return
+
+        const { owner, repo } = getOwnerAndRepo(subscriptionParams.repoFullName)
+        if (!(owner && repo)) return
+
+        subscriptionParams.owners = subscriptionParams.owners || {}
+        subscriptionParams.owners[owner] = subscriptionParams.owners[owner] || {
+          value: true,
+          repos: undefined,
+        }
+
+        subscriptionParams.owners[owner]!.repos =
+          subscriptionParams.owners[owner]!.repos || {}
+
+        subscriptionParams.owners[owner]!.repos![repo] = true
+
+        delete subscriptionParams.repoFullName
+      })
+    }),
+  13: (state: RootState) =>
+    immer(state, draft => {
+      draft.auth = draft.auth || {}
+      draft.counters = draft.counters || {}
+
+      const loginCount = (draft.auth as any).loginCount || 0
+      draft.counters.loginSuccess = loginCount || 0
+    }),
+  14: (state: RootState) =>
+    immer(state, draft => {
+      draft.subscriptions = draft.subscriptions || {}
+      draft.subscriptions.byId = draft.subscriptions.byId || {}
+
+      const subscriptionIds = Object.keys(draft.subscriptions.byId)
+      subscriptionIds.forEach(subscriptionId => {
+        const subscription = draft.subscriptions.byId[subscriptionId]
+        if (!(subscription && subscription.data)) return
+
+        const items: EnhancedItem[] | undefined = (subscription.data as any)
+          .items
+        delete (subscription.data as any).items
+
+        if (!(items && items.length)) return
+        subscription.data.itemNodeIdOrIds = items
+          .map(getItemNodeIdOrId)
+          .filter(Boolean) as string[]
+
+        draft.data = draft.data || {}
+        draft.data.allIds = draft.data.allIds || []
+        draft.data.byId = draft.data.byId || {}
+        draft.data.idsBySubscriptionId = draft.data.idsBySubscriptionId || {}
+        draft.data.idsByType = draft.data.idsByType || {}
+        draft.data.savedIds = draft.data.savedIds || []
+        draft.data.readIds = draft.data.readIds || []
+
+        items.forEach(item => {
+          if (!item) return
+
+          const now = new Date().toISOString()
+
+          const id = getItemNodeIdOrId(item)
+          if (!id) return
+
+          const type: DevHubDataItemType =
+            subscription.type === 'activity'
+              ? 'event'
+              : subscription.type === 'notifications'
+              ? 'notification'
+              : subscription.type
+
+          if (!draft.data.allIds.includes(id)) draft.data.allIds.push(id)
+
+          draft.data.byId[id] = draft.data.byId[id] || {
+            item: undefined,
+            createdAt: now,
+            subscriptionIds: [],
+            type,
+            updatedAt: now,
+          }
+
+          draft.data.byId[id]!.item = item
+          draft.data.byId[id]!.subscriptionIds = _.uniq(
+            (draft.data.byId[id]!.subscriptionIds || []).concat(
+              subscription.id,
+            ),
+          )
+
+          draft.data.byId[id]!.type = type
+          draft.data.byId[id]!.updatedAt = now
+
+          draft.data.idsBySubscriptionId[subscription.id] =
+            draft.data.idsBySubscriptionId[subscription.id] || []
+          if (!draft.data.idsBySubscriptionId[subscription.id].includes(id))
+            draft.data.idsBySubscriptionId[subscription.id].push(id)
+
+          draft.data.idsByType[type] = draft.data.idsByType[type] || []
+
+          if (!draft.data.idsByType[type]!.includes(id))
+            draft.data.idsByType[type]!.push(id)
+
+          if (isItemSaved(item) || (item as any).saved) {
+            delete (item as any).saved
+
+            if (!draft.data.savedIds.includes(id)) {
+              draft.data.savedIds.push(id)
+              draft.data.updatedAt = now
+            }
+
+            if (!item.last_saved_at) item.last_saved_at = now
+          }
+          // } else if (draft.data.savedIds.includes(id)) {
+          //   draft.data.savedIds = draft.data.savedIds.filter(
+          //     savedId => savedId !== id,
+          //   )
+          //   draft.data.updatedAt = now
+          // }
+
+          if (type !== 'notification' && isItemRead(item)) {
+            if (!draft.data.readIds.includes(id)) {
+              draft.data.readIds.push(id)
+              draft.data.updatedAt = now
+            }
+          }
+        })
+      })
+    }),
+  15: (state: RootState) =>
+    immer(state, draft => {
+      draft.columns = draft.columns || {}
+      draft.columns.byId = draft.columns.byId || {}
+
+      const columnIds = Object.keys(draft.columns.byId)
+      columnIds.forEach(columnId => {
+        const column = draft.columns.byId![columnId]
+        if (!column) return
+
+        column.subscriptionIds = column.subscriptionIds || []
+        column.subscriptionIdsHistory = column.subscriptionIdsHistory || []
+
+        column.subscriptionIds.forEach(subscriptionId => {
+          if (!subscriptionId) return
+          if (!column.subscriptionIdsHistory.includes(subscriptionId)) {
+            column.subscriptionIdsHistory.push(subscriptionId)
+          }
+        })
+      })
+    }),
+  16: (state: RootState) =>
+    immer(state, draft => {
+      draft.subscriptions = draft.subscriptions || {}
+      draft.subscriptions.byId = draft.subscriptions.byId || {}
+
+      const subscriptionIds = Object.keys(draft.subscriptions.byId)
+      subscriptionIds.forEach(subscriptionId => {
+        const subscription = draft.subscriptions.byId![subscriptionId]
+        if (!subscription) return
+
+        subscription.data = subscription.data || {}
+        subscription.data.lastFetchRequestAt = (subscription.data as any).lastFetchedAt
+        subscription.data.lastFetchSuccessAt = (subscription.data as any).lastFetchedSuccessfullyAt
+      })
+
+      draft.github = draft.github || {}
+      draft.github.installations = draft.github.installations || {}
+      draft.github.installations.lastFetchRequestAt = (draft.github
+        .installations as any).lastFetchedAt
+      draft.github.installations.lastFetchSuccessAt = (draft.github
+        .installations as any).lastFetchedSuccessfullyAt
+    }),
+  17: (state: RootState) =>
+    immer(state, draft => {
+      draft.columns = draft.columns || {}
+      draft.columns.byId = draft.columns.byId || {}
+
+      const columnIds = Object.keys(draft.columns.byId)
+      columnIds.forEach(columnId => {
+        const column = draft.columns.byId![columnId] as NotificationColumn
+
+        if (!(column && column.type === 'notifications')) return
+
+        if (
+          column &&
+          column.filters &&
+          column.filters.notifications &&
+          column.filters.notifications.reasons &&
+          typeof column.filters.notifications.reasons.review_requested ===
+            'boolean'
+        ) {
+          column.filters.notifications.reasons.team_review_requested =
+            column.filters.notifications.reasons.review_requested
         }
       })
     }),

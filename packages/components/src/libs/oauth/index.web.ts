@@ -1,18 +1,17 @@
 import qs from 'qs'
 import url from 'url'
 
-import { constants, GitHubAppType } from '@devhub/core'
+import { constants, GitHubAppType, OAuthResponseData } from '@devhub/core'
 import { Linking } from '../linking'
 import { Platform } from '../platform/index.web'
 import {
   getUrlParamsIfMatches,
   listenForNextMessageData,
   listenForNextUrl,
-  OAuthResponseData,
 } from './helpers'
 
 const schemaRedirectUri = Platform.isElectron
-  ? 'devhub://github/oauth'
+  ? constants.APP_DEEP_LINK_URLS.github_oauth
   : undefined
 
 function getPopupTarget() {
@@ -20,7 +19,8 @@ function getPopupTarget() {
   const query = qs.parse(url.parse(currentURL).query || '')
 
   return !__DEV__ &&
-    (Platform.realOS !== 'web' ||
+    (Platform.realOS === 'ios' ||
+      Platform.realOS === 'android' ||
       query.installation_id ||
       Platform.isStandalone ||
       (navigator.userAgent || '').includes('Edge'))

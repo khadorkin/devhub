@@ -1,28 +1,57 @@
+import immer from 'immer'
 import _ from 'lodash'
 import moment from 'moment'
 
 import {
   EnhancedGitHubEvent,
+  GitHubComment,
+  GitHubCommitCommentEvent,
+  GitHubEnhancedEventBase,
   GitHubEvent,
   GitHubEventAction,
   GitHubEventSubjectType,
+  GitHubForkEvent,
+  GitHubGollumEvent,
   GitHubIcon,
   GitHubIssue,
+  GitHubIssuesEvent,
+  GitHubMemberEvent,
+  GitHubPage,
   GitHubPullRequest,
+  GitHubPullRequestEvent,
+  GitHubPushedCommit,
+  GitHubPushEvent,
+  GitHubReleaseEvent,
+  GitHubRepo,
+  GitHubUser,
   MultipleStarEvent,
-  Omit,
   ThemeColors,
+  UserPlan,
 } from '../../types'
+import { constants } from '../../utils'
+import { isPlanStatusValid } from '../plans'
+import { isEventPrivate } from '../shared'
 import {
-  getBranchNameFromRef,
   getCommitIconAndColor,
   getIssueIconAndColor,
+  getItemIsBot,
+  getNameFromRef,
+  getOwnerAndRepo,
   getPullRequestIconAndColor,
   getReleaseIconAndColor,
   getTagIconAndColor,
   isDraft,
+  isItemRead,
+  isItemSaved,
   isPullRequest,
 } from './shared'
+import {
+  getGitHubAvatarURLFromPayload,
+  getGitHubURLForRepo,
+  getIssueOrPullRequestNumberFromUrl,
+  getRepoFullNameFromObject,
+  getRepoFullNameFromUrl,
+} from './url'
 
 export const eventActions: GitHubEventAction[] = [
   'added',
@@ -54,12 +83,18 @@ export const eventSubjectTypes: GitHubEventSubjectType[] = [
   'Wiki',
 ]
 
-export function getOlderEventDate(
-  events: EnhancedGitHubEvent[],
-  field: keyof EnhancedGitHubEvent = 'created_at',
-) {
-  const olderItem = sortEvents(events, field, 'desc').pop()
-  return olderItem && olderItem[field]
+export function getOlderOrNewerEventDate(
+  order: 'newer' | 'older',
+  items: EnhancedGitHubEvent[] | undefined,
+  { ignoreFutureDates = true } = {},
+): string | undefined {
+  const now = Date.now()
+  return sortEvents(items, 'created_at', order === 'newer' ? 'desc' : 'asc')
+    .map(item => item.created_at)
+    .filter(
+      date =>
+        !!(date && ignoreFutureDates ? now > new Date(date).getTime() : true),
+    )[0]
 }
 
 export function getEventActionMetadata<T extends GitHubEventAction>(
@@ -73,10 +108,14 @@ export function getEventMetadata(
   options:
     | {
         appendColon?: boolean
+        commitIsKnown?: boolean
         includeBranch?: boolean
         includeFork?: boolean
+        includeRepo?: boolean
         includeTag?: boolean
+        includeUser?: boolean
         issueOrPullRequestIsKnown?: boolean
+        ownerIsKnown?: boolean
         repoIsKnown?: boolean
       }
     | undefined = {},
@@ -87,24 +126,41 @@ export function getEventMetadata(
 } {
   const {
     appendColon,
+    commitIsKnown,
     includeBranch,
     includeFork,
+    includeRepo,
     includeTag,
+    includeUser,
     issueOrPullRequestIsKnown,
+    ownerIsKnown,
     repoIsKnown,
   } = options
 
+  const repoFullName =
+    ('repo' in event && getRepoFullNameFromObject(event.repo)) ||
+    ('repos' in event && getRepoFullNameFromObject(event.repos[0]))
+
   const isDraftPR =
-    ('pull_request' in event.payload && isDraft(event.payload.pull_request)) ||
-    ('issue' in event.payload &&
-      isPullRequest(event.payload.issue) &&
-      isDraft(event.payload.issue as GitHubPullRequest))
+    event &&
+    event.payload &&
+    (('pull_request' in event.payload && isDraft(event.payload.pull_request)) ||
+      ('issue' in event.payload &&
+        isPullRequest(event.payload.issue) &&
+        isDraft(event.payload.issue as GitHubPullRequest)))
 
   const issueText = issueOrPullRequestIsKnown ? 'this issue' : 'an issue'
   const pullRequestText = issueOrPullRequestIsKnown
-    ? `this ${isDraftPR ? 'draft pull request' : 'pull request'}`
-    : `a ${isDraftPR ? 'draft pull request' : 'pull request'}`
-  const repositoryText = repoIsKnown ? 'this repository' : 'a repository'
+    ? `this ${isDraftPR ? 'draft pr' : 'pr'}`
+    : `a ${isDraftPR ? 'draft pr' : 'pr'}`
+  let repositoryText = repoIsKnown
+    ? 'this repository'
+    : (includeRepo && repoFullName) || 'a repository'
+
+  if (ownerIsKnown && repositoryText === repoFullName) {
+    const { owner } = getOwnerAndRepo(repositoryText)
+    if (owner) repositoryText = repositoryText.replace(`${owner}/`, '')
+  }
 
   const colonText = appendColon ? ':' : ''
 
@@ -127,7 +183,7 @@ export function getEventMetadata(
       case 'CommitCommentEvent': {
         return {
           action: 'commented',
-          actionText: `Commented on a commit${colonText}`,
+          actionText: `Commented on commit${colonText}`,
           subjectType: 'Commit',
         }
       }
@@ -140,12 +196,12 @@ export function getEventMetadata(
               subjectType: 'Repository',
             }
           case 'branch': {
-            const branch = getBranchNameFromRef(event.payload.ref || undefined)
+            const branch = getNameFromRef(event.payload.ref || undefined)
             return {
               action: 'created',
               actionText:
                 includeBranch && branch
-                  ? `Created the branch ${branch}`
+                  ? `Created branch ${branch}`
                   : `Created a branch${colonText}`,
               subjectType: 'Branch',
             }
@@ -156,7 +212,7 @@ export function getEventMetadata(
               action: 'created',
               actionText:
                 includeTag && tag
-                  ? `Created the tag ${tag}`
+                  ? `Created tag ${tag}`
                   : `Created a tag${colonText}`,
               subjectType: 'Tag',
             }
@@ -179,12 +235,12 @@ export function getEventMetadata(
               subjectType: 'Repository',
             }
           case 'branch': {
-            const branch = getBranchNameFromRef(event.payload.ref)
+            const branch = getNameFromRef(event.payload.ref)
             return {
               action: 'deleted',
               actionText:
                 includeBranch && branch
-                  ? `Deleted the branch ${branch}`
+                  ? `Deleted branch ${branch}`
                   : `Deleted a branch${colonText}`,
               subjectType: 'Branch',
             }
@@ -195,7 +251,7 @@ export function getEventMetadata(
               action: 'deleted',
               actionText:
                 includeTag && tag
-                  ? `Deleted the tag ${tag}`
+                  ? `Deleted tag ${tag}`
                   : `Deleted a tag${colonText}`,
               subjectType: 'Tag',
             }
@@ -211,11 +267,20 @@ export function getEventMetadata(
 
       case 'ForkEvent': {
         const fork = event.payload.forkee
-        const forkFullName = fork && fork.full_name
+        const forkFullName =
+          fork && (fork.full_name || getRepoFullNameFromObject(fork))
+        const isSameName =
+          forkFullName &&
+          forkFullName.split('/')[1] === repositoryText.split('/')[1]
+
         return {
           action: 'forked',
           actionText: includeFork
-            ? `Forked ${repositoryText} to ${forkFullName}`
+            ? `Forked ${repositoryText}${
+                !repoIsKnown && forkFullName && !isSameName
+                  ? ` to ${forkFullName}`
+                  : ''
+              }`
             : `Forked ${repositoryTextWithColon}`,
           subjectType: 'Repository',
         }
@@ -229,12 +294,22 @@ export function getEventMetadata(
             event.payload.pages[0] &&
             event.payload.pages[0].action
         ) {
-          case 'created':
+          case 'created': {
             return {
               action: 'created',
               actionText: `Created ${pagesText}${colonText}`,
               subjectType: 'Wiki',
             }
+          }
+
+          case 'edited': {
+            return {
+              action: 'updated',
+              actionText: `Edited ${pagesText}${colonText}`,
+              subjectType: 'Wiki',
+            }
+          }
+
           default:
             return {
               action: 'updated',
@@ -338,10 +413,13 @@ export function getEventMetadata(
       }
 
       case 'MemberEvent': {
+        const username = event.payload.member && event.payload.member.login
         return {
           action: 'added',
-          actionText: `Added an user ${repositoryText &&
-            `to ${repositoryTextWithColon}`}`,
+          actionText:
+            includeUser && username
+              ? `Added @${username} to ${repositoryTextWithColon}`
+              : `Added a user to ${repositoryTextWithColon}`,
           subjectType: 'User',
         }
       }
@@ -474,20 +552,20 @@ export function getEventMetadata(
 
       case 'PushEvent': {
         const commits = event.payload.commits || [{}]
-        // const commit = event.payload.head_commit || commits[0];
-        const count =
-          Math.max(
-            ...[
-              1,
-              event.payload.size,
-              event.payload.distinct_size,
-              commits.length,
-            ],
-          ) || 1
+        const count = Math.max(
+          commits.length || 1,
+          event.payload.distinct_size || 1,
+          event.payload.size || 1,
+        )
 
-        const branch = getBranchNameFromRef(event.payload.ref)
+        const branch = getNameFromRef(event.payload.ref)
         const pushedText = event.forced ? 'Force pushed' : 'Pushed'
-        const commitText = count > 1 ? ` ${count} commits` : ' a commit'
+        const commitText =
+          count > 1
+            ? ` ${count} commits`
+            : commitIsKnown
+            ? ' this commit'
+            : ' a commit'
         const branchText = includeBranch && branch ? ` to ${branch}` : ''
 
         return {
@@ -637,7 +715,9 @@ export function mergeSimilarEvents(
 
   if (enhancedEvent) enhancedEvents.push(enhancedEvent)
 
-  return enhancedEvents.length === events.length ? events : enhancedEvents
+  const result =
+    enhancedEvents.length === events.length ? events : enhancedEvents
+  return result && result.length ? result : constants.EMPTY_ARRAY
 }
 
 export function isBranchMainEvent(event: EnhancedGitHubEvent) {
@@ -659,8 +739,9 @@ export function sortEvents(
   events: EnhancedGitHubEvent[] | undefined,
   field: keyof EnhancedGitHubEvent = 'created_at',
   order: 'asc' | 'desc' = 'desc',
-) {
-  if (!events) return []
+): EnhancedGitHubEvent[] {
+  if (!(events && events.length)) return constants.EMPTY_ARRAY
+
   return _(events)
     .uniqBy('id')
     .orderBy(field, order)
@@ -693,11 +774,11 @@ export function getEventIconAndColor(
     case 'DeleteEvent': {
       switch (event.payload.ref_type) {
         case 'repository':
-          return { icon: 'repo', color: 'red' }
+          return { icon: 'repo', color: 'lightRed' }
         case 'branch':
-          return { icon: 'git-branch', color: 'red' }
+          return { icon: 'git-branch', color: 'lightRed' }
         case 'tag':
-          return { icon: 'tag', color: 'red' }
+          return { icon: 'tag', color: 'lightRed' }
         default:
           return { icon: 'trashcan' }
       }
@@ -783,7 +864,9 @@ export function getEventIconAndColor(
     }
 
     case 'PushEvent':
-      return { icon: 'code' }
+      return {
+        icon: 'code',
+      }
 
     case 'ReleaseEvent':
       return isTagMainEvent(event)
@@ -827,28 +910,211 @@ export function mergeEventPreservingEnhancement(
 ) {
   if (!(newItem && existingItem)) return newItem || existingItem
 
-  delete newItem.last_read_at
-  delete newItem.last_unread_at
-
   const enhancements: Record<
     keyof Omit<EnhancedGitHubEvent, keyof GitHubEvent>,
     any
   > = {
     enhanced: existingItem.enhanced,
-    forceUnreadLocally: existingItem.forceUnreadLocally,
     last_read_at: _.max([existingItem.last_read_at, newItem.last_read_at]),
+    last_saved_at: _.max([existingItem.last_saved_at, newItem.last_saved_at]),
     last_unread_at: _.max([
       existingItem.last_unread_at,
       newItem.last_unread_at,
     ]),
-    saved: existingItem.saved,
-    unread: existingItem.unread,
+    last_unsaved_at: _.max([
+      existingItem.last_unsaved_at,
+      newItem.last_unsaved_at,
+    ]),
   }
 
-  const mergedItem: EnhancedGitHubEvent = {
-    ...enhancements,
-    ...newItem,
+  return immer(newItem, draft => {
+    Object.entries(enhancements).forEach(([key, value]) => {
+      if (typeof value === 'undefined') return
+      if (value === (draft as any)[key])
+        return // if (typeof (draft as any)[key] !== 'undefined') return
+      ;(draft as any)[key] = value
+    })
+  })
+}
+
+export function getGitHubEventSubItems(
+  event: EnhancedGitHubEvent,
+  { plan }: { plan: UserPlan | null | undefined },
+) {
+  const {
+    actor,
+    payload,
+    id,
+    type,
+    created_at: createdAt,
+  } = event as EnhancedGitHubEvent
+  const { merged: mergedIds } = event as GitHubEnhancedEventBase
+  const { repo: _repo } = event as GitHubEvent
+  const { repos: _repos } = event as MultipleStarEvent
+
+  const comment:
+    | GitHubComment
+    | undefined = (payload as GitHubCommitCommentEvent['payload']).comment
+  const { commits: _commits } = payload as GitHubPushEvent['payload']
+  const forkee: GitHubRepo | undefined = (payload as GitHubForkEvent['payload'])
+    .forkee
+  const { member: _member } = payload as GitHubMemberEvent['payload']
+  const { release } = payload as GitHubReleaseEvent['payload']
+  const { pages: _pages } = payload as GitHubGollumEvent['payload']
+  const {
+    pull_request: pullRequest,
+  } = payload as GitHubPullRequestEvent['payload']
+  const { issue } = payload as GitHubIssuesEvent['payload']
+  const { ref: branchOrTagRef } = payload as GitHubPushEvent['payload']
+
+  const branchOrTagName = getNameFromRef(branchOrTagRef)
+
+  const issueOrPullRequest = (issue || pullRequest) as
+    | typeof issue
+    | typeof pullRequest
+    | undefined
+
+  const issueOrPullRequestNumber = issueOrPullRequest
+    ? issueOrPullRequest.number ||
+      getIssueOrPullRequestNumberFromUrl(issueOrPullRequest!.url)
+    : undefined
+
+  const isRead = isItemRead(event)
+  const isSaved = isItemSaved(event)
+
+  const commits: GitHubPushedCommit[] = (_commits || []).filter(Boolean)
+
+  const repos: GitHubRepo[] = (_repos || [_repo]).filter(r => {
+    if (!(r && r.name)) return false
+
+    const or = getOwnerAndRepo(r.name)
+    return !!(or.owner && or.repo)
+  })
+
+  // ugly and super edge case workaround for repo not being returned on some commit events
+  if (!repos.length && commits[0]) {
+    const _repoFullName = getRepoFullNameFromUrl(commits[0].url)
+    const { owner, repo: name } = getOwnerAndRepo(_repoFullName)
+    if (owner && name) {
+      repos.push({
+        id: '',
+        fork: false,
+        private: false,
+        full_name: _repoFullName,
+        owner: { login: name } as any,
+        name,
+        url: getGitHubURLForRepo(owner, name)!,
+        html_url: getGitHubURLForRepo(owner, name)!,
+      })
+    }
   }
 
-  return _.isEqual(mergedItem, existingItem) ? existingItem : mergedItem
+  const users: GitHubUser[] = [_member].filter(Boolean) // TODO
+  const pages: GitHubPage[] = (_pages || []).filter(Boolean)
+
+  const repo = repos.length === 1 ? repos[0] : undefined
+
+  const commitShas = commits
+    .filter(Boolean)
+    .map((item: GitHubPushedCommit) => item.sha)
+  const pageShas = pages.filter(Boolean).map((item: GitHubPage) => item.sha)
+  const repoIds = repos.filter(Boolean).map((item: GitHubRepo) => item.id)
+  const userIds = users.filter(Boolean).map((item: GitHubUser) => item.id)
+
+  const repoFullName = repo && getRepoFullNameFromObject(repo)
+  const forkRepoFullName = getRepoFullNameFromObject(forkee)
+
+  const isPush = type === 'PushEvent'
+  const isForcePush = isPush && (payload as GitHubPushEvent).forced
+  const isPrivate = isEventPrivate(event)
+
+  const canSee =
+    !isPrivate ||
+    !!(
+      plan &&
+      isPlanStatusValid(plan) &&
+      plan.featureFlags.enablePrivateRepositories
+    )
+
+  const isBot = getItemIsBot('activity', event, {
+    considerProfileBotsAsBots: false,
+  })
+  const isBotOrFakeBot = getItemIsBot('activity', event, {
+    considerProfileBotsAsBots: true,
+  })
+
+  // GitHub returns the wrong avatar_url for app bots on actor.avatar_url,
+  // but the correct avatar on payload.abc.user.avatar_url,
+  // so lets get it from there instead
+  const botAvatarURL = isBot
+    ? getGitHubAvatarURLFromPayload(payload, actor.id)
+    : undefined
+
+  const avatarUrl = botAvatarURL || actor.avatar_url
+
+  return {
+    actor,
+    avatarUrl,
+    branchOrTagName,
+    canSee,
+    comment,
+    commitShas,
+    commits,
+    createdAt,
+    forkRepoFullName,
+    forkee,
+    id,
+    isBot,
+    isBotOrFakeBot,
+    isBranchMainEvent: isBranchMainEvent(event),
+    isForcePush,
+    isPrivate,
+    isPush,
+    isRead,
+    isSaved,
+    isTagMainEvent: isTagMainEvent(event),
+    issueOrPullRequest,
+    issueOrPullRequestNumber,
+    mergedIds,
+    pageShas,
+    pages,
+    release,
+    repoFullName,
+    repoIds,
+    repos,
+    userIds,
+    users,
+  }
+}
+
+export function getEventWatchingOwner(
+  event: EnhancedGitHubEvent,
+  { dashboardFromUsername }: { dashboardFromUsername: string | undefined },
+): string | undefined {
+  let owner: string | undefined
+
+  if (event.type === 'ForkEvent' || event.type === 'WatchEvent') {
+    const repoFullName = getRepoFullNameFromObject(event.repo)
+    const repoOwner = repoFullName && repoFullName.split('/')[0]
+
+    owner =
+      repoOwner === dashboardFromUsername
+        ? repoOwner
+        : event.actor && event.actor.login
+  } else if (event.type === 'WatchEvent:OneUserMultipleRepos') {
+    const repoFullName = getRepoFullNameFromObject(event.repos[0])
+    const repoOwner = repoFullName && repoFullName.split('/')[0]
+
+    owner =
+      repoOwner === dashboardFromUsername
+        ? repoOwner
+        : event.actor && event.actor.login
+  } else if (event.type === 'MemberEvent') {
+    owner = event.payload.member && event.payload.member.login
+  } else {
+    const repoFullName = getRepoFullNameFromObject(event.repo)
+    owner = repoFullName && repoFullName.split('/')[0]
+  }
+
+  return owner || undefined
 }

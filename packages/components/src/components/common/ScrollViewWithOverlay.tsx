@@ -1,5 +1,7 @@
+import _ from 'lodash'
 import React, { Ref, useEffect, useRef } from 'react'
 import {
+  FlatList,
   ScrollView,
   ScrollViewProps,
   StyleSheet,
@@ -7,20 +9,21 @@ import {
   ViewProps,
 } from 'react-native'
 
-import { FlatList } from '../../libs/flatlist'
+import { sharedStyles } from '../../styles/shared'
 import { contentPadding } from '../../styles/variables'
 import {
-  AnimatedTransparentTextOverlay,
-  AnimatedTransparentTextOverlayProps,
+  TransparentTextOverlay,
+  TransparentTextOverlayProps,
 } from '../common/TransparentTextOverlay'
 
 export interface ScrollViewWithOverlayProps extends ScrollViewProps {
   ScrollViewComponent?: typeof ScrollView | typeof FlatList | any
+  bottomOrRightOverlayThemeColor?: TransparentTextOverlayProps['themeColor']
   children?: React.ReactNode
   containerStyle?: ViewProps['style']
-  overlayThemeColor?: AnimatedTransparentTextOverlayProps['themeColor']
-  overlaySize?: AnimatedTransparentTextOverlayProps['size']
-  overlaySpacing?: AnimatedTransparentTextOverlayProps['spacing']
+  overlaySize?: TransparentTextOverlayProps['size']
+  overlaySpacing?: TransparentTextOverlayProps['spacing']
+  topOrLeftOverlayThemeColor?: TransparentTextOverlayProps['themeColor']
 }
 
 export const ScrollViewWithOverlay = React.forwardRef(
@@ -29,26 +32,51 @@ export const ScrollViewWithOverlay = React.forwardRef(
       ScrollViewComponent = ScrollView,
       containerStyle,
       horizontal,
-      overlaySize = contentPadding,
-      overlaySpacing = contentPadding / 2,
-      overlayThemeColor = 'backgroundColor',
+      overlaySize = contentPadding / 2,
+      overlaySpacing: _overlaySpacing,
+      topOrLeftOverlayThemeColor = 'backgroundColor',
+      bottomOrRightOverlayThemeColor = 'backgroundColor',
       ...restProps
     } = props
+
+    const overlaySpacing =
+      typeof _overlaySpacing === 'undefined'
+        ? topOrLeftOverlayThemeColor === 'primaryBackgroundColor' ||
+          bottomOrRightOverlayThemeColor === 'primaryBackgroundColor'
+          ? '20%'
+          : 0
+        : _overlaySpacing
+
+    const radius =
+      typeof _overlaySpacing === 'undefined'
+        ? topOrLeftOverlayThemeColor === 'primaryBackgroundColor' ||
+          bottomOrRightOverlayThemeColor === 'primaryBackgroundColor'
+          ? overlaySize
+          : 0
+        : 0
 
     const _defaultRef = useRef<ScrollView>(null)
     const ref = _ref || _defaultRef
 
     const layoutSizeRef = useRef({ width: 0, height: 0 })
     const contentSizeRef = useRef({ width: 0, height: 0 })
-    const leftOrTopOverlayRef = useRef<View>(null)
-    const rightOrBottomOverlayRef = useRef<View>(null)
+    const leftOrTopOverlayRef = useRef<View | null>(null)
+    const rightOrBottomOverlayRef = useRef<View | null>(null)
     const isLeftOrTopOverlayVisible = useRef(null as boolean | null)
     const isRightOrBottomOverlayVisible = useRef(null as boolean | null)
     const isScrollAtTheStartRef = useRef(true)
     const isScrollAtTheEndRef = useRef(false)
 
-    function updateOverlayVisibility() {
+    useEffect(() => {
+      return () => {
+        leftOrTopOverlayRef.current = null
+        rightOrBottomOverlayRef.current = null
+      }
+    }, [])
+
+    const updateOverlayVisibility = _.debounce(() => {
       const property = horizontal ? 'width' : 'height'
+
       const hasScroll = !!(
         layoutSizeRef.current &&
         layoutSizeRef.current[property] &&
@@ -59,7 +87,6 @@ export const ScrollViewWithOverlay = React.forwardRef(
 
       const shouldShowLeftOrTopOverlay =
         hasScroll && !isScrollAtTheStartRef.current
-
       const shouldShowRightOrBottomOverlay =
         hasScroll && !isScrollAtTheEndRef.current
 
@@ -69,7 +96,9 @@ export const ScrollViewWithOverlay = React.forwardRef(
       ) {
         isLeftOrTopOverlayVisible.current = shouldShowLeftOrTopOverlay
         leftOrTopOverlayRef.current.setNativeProps({
-          style: { opacity: shouldShowLeftOrTopOverlay ? 1 : 0 },
+          style: {
+            opacity: shouldShowLeftOrTopOverlay ? 1 : 0,
+          },
         })
       }
 
@@ -82,7 +111,7 @@ export const ScrollViewWithOverlay = React.forwardRef(
           style: { opacity: shouldShowRightOrBottomOverlay ? 1 : 0 },
         })
       }
-    }
+    }, 100)
 
     const onScroll: ScrollViewProps['onScroll'] = e => {
       isScrollAtTheStartRef.current = horizontal
@@ -122,19 +151,13 @@ export const ScrollViewWithOverlay = React.forwardRef(
       if (props.onLayout) props.onLayout(e)
     }
 
-    useEffect(() => {
-      updateOverlayVisibility()
-    }, [leftOrTopOverlayRef.current, rightOrBottomOverlayRef.current])
-
     return (
-      <View
-        collapsable={false}
-        style={[{ position: 'relative', flex: 1 }, containerStyle]}
-      >
+      <View collapsable={false} style={[sharedStyles.relative, containerStyle]}>
         <ScrollViewComponent
           ref={ref}
           horizontal={horizontal}
-          scrollEventThrottle={3}
+          scrollEventThrottle={16}
+          updateCellsBatchingPeriod={0}
           {...restProps}
           collapsable={false}
           onContentSizeChange={onContentSizeChange}
@@ -142,24 +165,34 @@ export const ScrollViewWithOverlay = React.forwardRef(
           onScroll={onScroll}
         />
 
-        <AnimatedTransparentTextOverlay
+        <TransparentTextOverlay
           ref={leftOrTopOverlayRef}
-          containerStyle={StyleSheet.absoluteFill}
+          containerStyle={[
+            StyleSheet.absoluteFill,
+            !isLeftOrTopOverlayVisible.current && sharedStyles.opacity0,
+          ]}
+          radius={radius}
           size={overlaySize}
           spacing={overlaySpacing}
-          themeColor={overlayThemeColor}
+          themeColor={topOrLeftOverlayThemeColor}
           to={horizontal ? 'right' : 'bottom'}
         />
 
-        <AnimatedTransparentTextOverlay
+        <TransparentTextOverlay
           ref={rightOrBottomOverlayRef}
-          containerStyle={StyleSheet.absoluteFill}
+          containerStyle={[
+            StyleSheet.absoluteFill,
+            !isRightOrBottomOverlayVisible.current && sharedStyles.opacity0,
+          ]}
+          radius={radius}
           size={overlaySize}
           spacing={overlaySpacing}
-          themeColor={overlayThemeColor}
+          themeColor={bottomOrRightOverlayThemeColor}
           to={horizontal ? 'left' : 'top'}
         />
       </View>
     )
   },
 )
+
+ScrollViewWithOverlay.displayName = 'ScrollViewWithOverlay'

@@ -1,14 +1,16 @@
-import React, { ReactNode, useCallback, useRef } from 'react'
-import { StyleProp, StyleSheet, ViewStyle } from 'react-native'
+import React, { ReactNode, useLayoutEffect, useRef } from 'react'
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
 
 import { Theme, ThemeColors } from '@devhub/core'
 import { getColumnHeaderThemeColors } from '../columns/ColumnHeader'
 import { useTheme } from '../context/ThemeContext'
+import { ThemedSafeAreaView } from '../themed/ThemedSafeAreaView'
 import { ThemedView } from '../themed/ThemedView'
 
 export interface ScreenProps {
   children?: ReactNode
-  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header'
+  enableSafeArea?: boolean
+  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header' | 'transparent'
   style?: StyleProp<ViewStyle>
 }
 
@@ -19,48 +21,54 @@ const styles = StyleSheet.create({
 })
 
 export const Screen = React.memo((props: ScreenProps) => {
-  const { statusBarBackgroundThemeColor, ...viewProps } = props
-
-  const initialTheme = useTheme(
-    useCallback(theme => {
-      if (cacheRef.current.theme === theme) return
-
-      cacheRef.current.theme = theme
-
-      updateStyles({
-        theme: cacheRef.current.theme,
-        statusBarBackgroundThemeColor:
-          cacheRef.current.statusBarBackgroundThemeColor,
-      })
-    }, []),
-  )
-
-  const cacheRef = useRef({
-    theme: initialTheme,
+  const {
+    enableSafeArea = true,
     statusBarBackgroundThemeColor,
-  })
-  cacheRef.current.theme = initialTheme
-  cacheRef.current.statusBarBackgroundThemeColor = statusBarBackgroundThemeColor
+    style,
+    ...viewProps
+  } = props
 
-  return (
-    <ThemedView
-      {...viewProps}
+  const ref = useRef<View>(null)
+
+  const theme = useTheme()
+
+  useLayoutEffect(() => {
+    updateStyles({
+      statusBarBackgroundThemeColor,
+      theme,
+    })
+  }, [statusBarBackgroundThemeColor, theme])
+
+  return enableSafeArea ? (
+    <ThemedSafeAreaView
+      ref={ref}
       backgroundColor="backgroundColor"
-      style={[styles.container, props.style]}
+      {...viewProps}
+      style={[styles.container, style]}
+    />
+  ) : (
+    <ThemedView
+      ref={ref}
+      backgroundColor="backgroundColor"
+      {...viewProps}
+      style={[styles.container, style]}
     />
   )
 })
+
+Screen.displayName = 'Screen'
 
 function updateStyles({
   theme,
   statusBarBackgroundThemeColor,
 }: {
   theme: Theme
-  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header'
+  statusBarBackgroundThemeColor?: ScreenProps['statusBarBackgroundThemeColor']
 }) {
   const themeColor: keyof ThemeColors =
-    statusBarBackgroundThemeColor === 'header'
-      ? getColumnHeaderThemeColors(theme.backgroundColor).normal
+    statusBarBackgroundThemeColor === 'header' ||
+    statusBarBackgroundThemeColor === 'transparent'
+      ? getColumnHeaderThemeColors().normal
       : statusBarBackgroundThemeColor || 'backgroundColor'
 
   const color = theme[themeColor]

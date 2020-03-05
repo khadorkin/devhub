@@ -1,35 +1,69 @@
 import React from 'react'
+import { StyleSheet, View } from 'react-native'
 
-import { AppViewMode, ThemeColors } from '@devhub/core'
+import { ThemeColors } from '@devhub/core'
 import { useAppViewMode } from '../../hooks/use-app-view-mode'
-import { Separator, SeparatorProps } from '../common/Separator'
+import {
+  Separator,
+  SeparatorProps,
+  separatorThickSize,
+} from '../common/Separator'
 import { useAppLayout } from '../context/LayoutContext'
 
 export function getColumnCardBackgroundThemeColor(
   _backgroundColor: string,
-  _appViewMode: AppViewMode,
 ): keyof ThemeColors {
   return 'backgroundColor'
 }
 
-export interface ColumnSeparatorProps extends SeparatorProps {}
+export function getColumnSeparatorSize() {
+  return separatorThickSize
+}
+
+const styles = StyleSheet.create({
+  separatorCenterContainer: {
+    width: separatorThickSize,
+    alignItems: 'center',
+  },
+
+  separatorCenterContainer__half: {
+    width: separatorThickSize / 2,
+  },
+})
+
+export interface ColumnSeparatorProps
+  extends Pick<SeparatorProps, 'half' | 'zIndex'> {
+  absolute?: 'none' | 'left' | 'right'
+}
 
 export function ColumnSeparator(props: ColumnSeparatorProps) {
-  const { appOrientation } = useAppLayout()
+  const { absolute, half, zIndex } = props
+
+  const { sizename } = useAppLayout()
   const { appViewMode } = useAppViewMode()
 
-  const horizontalSidebar = appOrientation === 'portrait'
+  if (appViewMode === 'single-column' || sizename === '1-small') {
+    return (
+      <View
+        style={[
+          styles.separatorCenterContainer,
+          half && styles.separatorCenterContainer__half,
+          !!zIndex && { zIndex },
+        ]}
+      >
+        <Separator absolute={absolute} horizontal={false} zIndex={zIndex} />
+      </View>
+    )
+  }
 
   return (
     <Separator
-      backgroundThemeColor={
-        appViewMode === 'single-column'
-          ? 'backgroundColor'
-          : 'backgroundColorDarker1'
-      }
-      horizontal={horizontalSidebar}
-      thick={!horizontalSidebar}
-      {...props}
+      absolute={absolute}
+      backgroundThemeColor1="backgroundColorDarker2"
+      half={half}
+      horizontal={false}
+      thick
+      zIndex={zIndex}
     />
   )
 }

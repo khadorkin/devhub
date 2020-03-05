@@ -1,25 +1,26 @@
-import React, { Suspense } from 'react'
+import React from 'react'
 
-import { Screen } from '../components/common/Screen'
+import { ElectronTitleBar } from '../components/ElectronTitleBar'
 import { useReduxState } from '../hooks/use-redux-state'
+import { Platform } from '../libs/platform'
 import * as selectors from '../redux/selectors'
+import { LoginScreen } from '../screens/LoginScreen'
+import { MainScreen } from '../screens/MainScreen'
 
 export const AppNavigator = React.memo(() => {
   const user = useReduxState(selectors.currentUserSelector)
 
-  if (user) {
-    const MainScreen = React.lazy(() => import('../screens/MainScreen'))
-    return (
-      <Suspense fallback={<Screen />}>
-        <MainScreen key="app-main-screen" />
-      </Suspense>
-    )
-  }
-
-  const LoginScreen = React.lazy(() => import('../screens/LoginScreen'))
   return (
-    <Suspense fallback={<Screen />}>
-      <LoginScreen key="app-login-screen" />
-    </Suspense>
+    <>
+      {!!Platform.isElectron && <ElectronTitleBar />}
+
+      {user ? (
+        <MainScreen key="app-main-screen" />
+      ) : (
+        <LoginScreen key="app-login-screen" />
+      )}
+    </>
   )
 })
+
+AppNavigator.displayName = 'AppNavigator'

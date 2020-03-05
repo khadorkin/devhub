@@ -1,40 +1,31 @@
-import { darken, getLuminance, lighten } from 'polished'
-import React, { useCallback, useMemo } from 'react'
+import _ from 'lodash'
+import React, { useMemo } from 'react'
 
-import { ColumnSubscription, Theme } from '@devhub/core'
-import { useReduxState } from '../hooks/use-redux-state'
-import * as selectors from '../redux/selectors'
-import { themeColorFields } from '../utils/helpers/theme'
-import { getSeparatorThemeColor } from './common/Separator'
-import { useFocusedColumn } from './context/ColumnFocusContext'
+import { Theme, themeColorFields } from '@devhub/core'
 import { useTheme } from './context/ThemeContext'
 
-function getStyles(params: { theme: Theme; isLoading: boolean }) {
-  const { isLoading, theme: t } = params
-  const separatorColor = t[getSeparatorThemeColor(t.backgroundColor)]
-  const separatorColorLuminance = getLuminance(separatorColor)
-  const backgroundColorLuminance = getLuminance(t.backgroundColor)
+function getStyles(params: { theme: Theme }) {
+  const { theme: t } = params
+
+  const invertedTheme = t.invert()
 
   return `
-    ::-webkit-scrollbar-thumb {
-      background-color: ${
-        separatorColorLuminance > backgroundColorLuminance
-          ? lighten(0.025, separatorColor)
-          : darken(0.025, separatorColor)
-      };
-    }
-
     *:focus {
       outline-color: ${t.primaryBackgroundColor};
     }
 
     body {
       ${themeColorFields
-        .map(field => `--theme_${field}:${t[field]};`)
+        .map(field => `--theme-${_.kebabCase(field)}:${t[field]};`)
+        .join('\n')}
+      ${themeColorFields
+        .map(
+          field =>
+            `--theme-inverted-${_.kebabCase(field)}:${invertedTheme[field]};`,
+        )
         .join('\n')}
       background-color:${t.backgroundColor};
       color: ${t.foregroundColor};
-      cursor: ${isLoading ? 'progress' : 'default'};
     }
   `
 }
@@ -42,25 +33,11 @@ function getStyles(params: { theme: Theme; isLoading: boolean }) {
 export const AppGlobalStyles = React.memo(() => {
   const theme = useTheme()
 
-  const { focusedColumnId } = useFocusedColumn()
-  const mainSubscription = useReduxState(
-    useCallback(
-      state =>
-        selectors.columnSubscriptionSelector(state, focusedColumnId || ''),
-      [focusedColumnId],
-    ),
-  ) as ColumnSubscription | undefined
-
-  const isLoading = !!(
-    mainSubscription &&
-    mainSubscription.data &&
-    (mainSubscription.data.loadState === 'loading' ||
-      mainSubscription.data.loadState === 'loading_first' ||
-      mainSubscription.data.loadState === 'loading_more')
-  )
-  const styles = getStyles({ theme, isLoading })
+  const styles = getStyles({ theme })
 
   return useMemo(() => <style key="app-global-styles-inner">{styles}</style>, [
     styles,
   ])
 })
+
+AppGlobalStyles.displayName = 'AppGlobalStyles'

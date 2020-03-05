@@ -1,7 +1,7 @@
 import React from 'react'
-import { Image, StyleProp } from 'react-native'
+import { Image } from 'react-native'
 
-import { Omit, ThemeColors } from '@devhub/core'
+import { Theme, ThemeColors, ThemeTransformer } from '@devhub/core'
 import {
   ImageWithLoading,
   ImageWithLoadingProps,
@@ -17,24 +17,27 @@ export interface ThemedImageWithLoadingProps
     | 'backgroundColorLoading'
     | 'style'
   > {
-  backgroundColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
+  backgroundColor?: keyof ThemeColors | ((theme: Theme) => string)
   backgroundColorFailed?:
     | keyof ThemeColors
     | string
-    | ((theme: ThemeColors) => string)
+    | ((theme: Theme) => string)
   backgroundColorLoaded?:
     | keyof ThemeColors
     | string
-    | ((theme: ThemeColors) => string)
+    | ((theme: Theme) => string)
   backgroundColorLoading?:
     | keyof ThemeColors
     | string
-    | ((theme: ThemeColors) => string)
-  borderColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
+    | ((theme: Theme) => string)
+  borderColor?: keyof ThemeColors | ((theme: Theme) => string)
   children?: React.ReactNode
-  style?: StyleProp<
-    Omit<ImageWithLoadingProps['style'], 'backgroundColor' | 'borderColor'>
+  style?: Omit<
+    ImageWithLoadingProps['style'],
+    'backgroundColor' | 'borderColor'
   >
+
+  themeTransformer?: ThemeTransformer
 }
 
 export const ThemedImageWithLoading = React.forwardRef<
@@ -48,10 +51,11 @@ export const ThemedImageWithLoading = React.forwardRef<
     backgroundColorLoading: _backgroundColorLoading,
     borderColor,
     style,
+    themeTransformer,
     ...otherProps
   } = props
 
-  const theme = useTheme()
+  const theme = useTheme({ themeTransformer })
 
   const backgroundColorFailed = getThemeColorOrItself(
     theme,
@@ -66,7 +70,9 @@ export const ThemedImageWithLoading = React.forwardRef<
   const backgroundColorLoading = getThemeColorOrItself(
     theme,
     _backgroundColorLoading,
-    { enableCSSVariable: true },
+    {
+      enableCSSVariable: true,
+    },
   )
 
   return (
@@ -76,15 +82,17 @@ export const ThemedImageWithLoading = React.forwardRef<
       backgroundColorFailed={backgroundColorFailed}
       backgroundColorLoaded={backgroundColorLoaded}
       backgroundColorLoading={backgroundColorLoading}
-      style={[style, getStyle(theme, { backgroundColor, borderColor })]}
+      style={{ ...style, ...getStyle(theme, { backgroundColor, borderColor }) }}
     />
   )
 })
 
+ThemedImageWithLoading.displayName = 'ThemedImageWithLoading'
+
 export type ThemedImageWithLoading = typeof ThemedImageWithLoading
 
 function getStyle(
-  theme: ThemeColors,
+  theme: Theme,
   {
     backgroundColor: _backgroundColor,
     borderColor: _borderColor,

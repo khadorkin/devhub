@@ -1,9 +1,8 @@
-import React from 'react'
-import { Image, Text, View, ViewStyle } from 'react-native'
-
 import { EnhancedLoadState } from '@devhub/core'
-import { useReduxAction } from '../../hooks/use-redux-action'
-import * as actions from '../../redux/actions'
+import React from 'react'
+import { Image, View } from 'react-native'
+
+import { useColumnLoadingState } from '../../hooks/use-column-loading-state'
 import { sharedStyles } from '../../styles/shared'
 import { contentPadding } from '../../styles/variables'
 import {
@@ -11,19 +10,22 @@ import {
   GitHubEmoji,
 } from '../../utils/helpers/github/emojis'
 import { Button, defaultButtonSize } from '../common/Button'
-import { fabSize } from '../common/FAB'
+import { fabSize, fabSpacing } from '../common/FAB'
+import { FullHeightScrollView } from '../common/FullHeightScrollView'
 import { Spacer } from '../common/Spacer'
-import { useAppLayout } from '../context/LayoutContext'
-import { fabSpacing, shouldRenderFAB } from '../layout/FABRenderer'
 import { ThemedActivityIndicator } from '../themed/ThemedActivityIndicator'
 import { ThemedText } from '../themed/ThemedText'
-import { GenericMessageWithButtonView } from './GenericMessageWithButtonView'
+import {
+  GenericMessageWithButtonView,
+  GenericMessageWithButtonViewProps,
+} from './GenericMessageWithButtonView'
 
 const clearMessages = [
+  "You're doing great!",
   'All clear!',
   'Awesome!',
   'Good job!',
-  "You're doing great!",
+  'Great work!',
   'You rock!',
 ]
 
@@ -39,11 +41,10 @@ const getRandomEmoji = () => {
   return emojis[randomIndex]
 }
 
-// only one message per app running instance
-// because a chaning message is a bit distractive
-const clearMessage = getRandomClearMessage()
+// only one emoji per app session
+// because dynamic content is bit distractive
+const randomClearMessage = getRandomClearMessage()
 const randomEmoji = getRandomEmoji()
-const randomEmojiImageURL = getEmojiImageURL(randomEmoji)
 
 export const defaultCardFooterSpacing =
   fabSpacing + Math.abs(fabSize - defaultButtonSize) / 2
@@ -51,62 +52,65 @@ export const defaultCardFooterHeight =
   defaultButtonSize + 2 * defaultCardFooterSpacing
 
 export interface EmptyCardsProps {
-  clearedAt: string | undefined
+  clearEmoji?: GitHubEmoji | null
+  clearMessage?: string
   columnId: string
-  emoji?: GitHubEmoji
+  disableLoadingIndicator?: boolean
+  emoji?: GitHubEmoji | null
+  errorButtonView?: GenericMessageWithButtonViewProps['buttonView']
   errorMessage?: string
   errorTitle?: string
   fetchNextPage: (() => void) | undefined
-  loadState: EnhancedLoadState
+  footer?: React.ReactNode
+  loadState?: EnhancedLoadState
   refresh: (() => void | Promise<void>) | undefined
 }
 
 export const EmptyCards = React.memo((props: EmptyCardsProps) => {
   const {
-    clearedAt,
+    clearEmoji = randomEmoji,
+    clearMessage = randomClearMessage,
     columnId,
+    disableLoadingIndicator,
     emoji = 'warning',
+    errorButtonView,
     errorMessage,
     errorTitle = 'Something went wrong',
     fetchNextPage,
-    loadState,
+    footer,
+    loadState: _loadStateProp,
     refresh,
   } = props
 
-  const { sizename } = useAppLayout()
+  const _loadState = useColumnLoadingState(columnId)
+  const loadState = _loadStateProp || _loadState
 
-  const setColumnClearedAtFilter = useReduxAction(
-    actions.setColumnClearedAtFilter,
-  )
-
+  const clearEmojiURL = clearEmoji ? getEmojiImageURL(clearEmoji) : undefined
   const hasError = errorMessage || loadState === 'error'
 
   const renderContent = () => {
     if (
-      loadState === 'loading_first' ||
-      (loadState === 'loading' && !refresh && !fetchNextPage)
+      !disableLoadingIndicator &&
+      (loadState === 'loading_first' ||
+        (loadState === 'loading' && !refresh && !fetchNextPage))
     ) {
       return <ThemedActivityIndicator color="foregroundColor" />
-    }
-
-    const containerStyle: ViewStyle = {
-      width: '100%',
-      padding: contentPadding,
     }
 
     if (hasError) {
       return (
         <GenericMessageWithButtonView
           buttonView={
-            !!refresh && (
+            errorButtonView ||
+            (!!refresh && (
               <Button
                 analyticsLabel="try_again"
                 children="Try again"
                 disabled={loadState !== 'error'}
-                loading={loadState === 'loading'}
+                loading={!disableLoadingIndicator && loadState === 'loading'}
                 onPress={() => refresh()}
               />
-            )
+            ))
           }
           emoji={emoji}
           title={errorTitle}
@@ -116,85 +120,56 @@ export const EmptyCards = React.memo((props: EmptyCardsProps) => {
     }
 
     return (
-      <View style={containerStyle}>
-        <ThemedText
-          color="foregroundColorMuted60"
-          style={{
-            lineHeight: 20,
-            fontSize: 14,
-            textAlign: 'center',
-          }}
-        >
-          {clearMessage}
-          {!!randomEmojiImageURL && (
-            <>
-              <Text children="  " />
+      <View
+        style={[
+          sharedStyles.fullWidth,
+          sharedStyles.padding,
+          sharedStyles.center,
+        ]}
+        pointerEvents="box-none"
+      >
+        {!!clearEmojiURL && (
+          <>
+            <Image
+              source={{ uri: clearEmojiURL }}
+              style={{ width: 24, height: 24 }}
+            />
 
-              <Image
-                source={{ uri: randomEmojiImageURL }}
-                style={{ width: 16, height: 16 }}
-              />
-            </>
-          )}
-        </ThemedText>
+            {!!clearMessage && <Spacer height={contentPadding / 2} />}
+          </>
+        )}
+
+        {!!clearMessage && (
+          <ThemedText
+            color="foregroundColorMuted65"
+            style={[
+              sharedStyles.textCenter,
+              {
+                fontSize: 20,
+                fontWeight: '200',
+              },
+            ]}
+          >
+            {clearMessage}
+          </ThemedText>
+        )}
       </View>
     )
   }
 
   return (
-    <View style={sharedStyles.flex}>
-      <View style={{ height: defaultCardFooterHeight }} />
-
-      <View
-        style={{
-          flex: 1,
-          alignContent: 'center',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: contentPadding,
-        }}
+    <>
+      <FullHeightScrollView
+        style={sharedStyles.flex}
+        contentContainerStyle={sharedStyles.center}
+        pointerEvents="box-none"
       >
         {renderContent()}
-      </View>
+      </FullHeightScrollView>
 
-      <View style={{ minHeight: defaultCardFooterHeight }}>
-        {hasError || loadState === 'loading_first' ? null : fetchNextPage ? (
-          <View
-            style={{
-              paddingHorizontal: contentPadding,
-              paddingVertical: defaultCardFooterSpacing,
-            }}
-          >
-            <Button
-              analyticsLabel="load_more"
-              children="Load more"
-              disabled={loadState !== 'loaded'}
-              loading={loadState === 'loading_more'}
-              onPress={fetchNextPage}
-            />
-          </View>
-        ) : clearedAt ? (
-          <View
-            style={{
-              paddingHorizontal: contentPadding,
-              paddingVertical: defaultCardFooterSpacing,
-            }}
-          >
-            <Button
-              analyticsLabel="show_cleared"
-              borderOnly
-              children="Show cleared items"
-              disabled={loadState !== 'loaded'}
-              onPress={() => {
-                setColumnClearedAtFilter({ clearedAt: null, columnId })
-                if (refresh) refresh()
-              }}
-            />
-          </View>
-        ) : shouldRenderFAB({ sizename }) ? (
-          <Spacer height={fabSize + 2 * fabSpacing} />
-        ) : null}
-      </View>
-    </View>
+      {footer}
+    </>
   )
 })
+
+EmptyCards.displayName = 'EmptyCards'

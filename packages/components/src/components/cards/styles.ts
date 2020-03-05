@@ -21,35 +21,6 @@ export const cardStyles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  compactContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: contentPadding * (2 / 3),
-    paddingHorizontal: contentPadding / 2,
-  },
-
-  compactItemFixedWidth: {
-    width: 22,
-    alignContent: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  compactItemFixedHeight: {
-    height: 22,
-    alignContent: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  compactItemFixedMinHeight: {
-    minHeight: 22,
-    alignContent: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   itemFixedWidth: {
     width: smallAvatarSize,
     alignContent: 'center',
@@ -108,35 +79,25 @@ export const cardStyles = StyleSheet.create({
   usernameText: {
     alignSelf: 'center',
     lineHeight: 20,
-    fontWeight: '500',
-    // color: theme.foregroundColor,
   } as TextStyle,
 
   timestampText: {
     lineHeight: smallerTextSize + 1,
     fontSize: smallerTextSize,
-    // color: theme.foregroundColorMuted60,
   },
 
   smallerText: {
     lineHeight: smallerTextSize + 1,
     fontSize: smallerTextSize,
-    // color: theme.foregroundColorMuted60,
   },
 
   commentText: {
-    // color: theme.foregroundColor,
     lineHeight: 20,
     fontSize: smallTextSize,
   },
 
-  // mutedText: {
-  //   // color: theme.foregroundColorMuted60,
-  // },
-
   normalText: {
     lineHeight: 20,
-    // color: theme.foregroundColor,
     ...Platform.select({
       default: {},
       web: {
@@ -148,17 +109,5 @@ export const cardStyles = StyleSheet.create({
   icon: {
     lineHeight: 20,
     marginRight: 2,
-  },
-
-  headerActionText: {
-    fontSize: smallTextSize,
-    lineHeight: 18,
-    // color: theme.foregroundColor,
-    ...Platform.select({
-      default: {},
-      web: {
-        wordWrap: 'break-word',
-      },
-    }),
   },
 })

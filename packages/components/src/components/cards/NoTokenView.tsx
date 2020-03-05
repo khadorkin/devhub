@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { View } from 'react-native'
+import { Alert, View } from 'react-native'
 
-import { constants, GitHubAppType } from '@devhub/core'
+import { constants, GitHubAppType, tryParseOAuthParams } from '@devhub/core'
 import { useReduxAction } from '../../hooks/use-redux-action'
 import { useReduxState } from '../../hooks/use-redux-state'
 import { analytics } from '../../libs/analytics'
@@ -10,8 +10,7 @@ import { executeOAuth } from '../../libs/oauth'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding } from '../../styles/variables'
-import { tryParseOAuthParams } from '../../utils/helpers/auth'
+import { clearOAuthQueryParams } from '../../utils/helpers/auth'
 import { GitHubEmoji } from '../../utils/helpers/github/emojis'
 import { Button } from '../common/Button'
 import { GenericMessageWithButtonView } from './GenericMessageWithButtonView'
@@ -50,6 +49,7 @@ export const NoTokenView = React.memo((props: NoTokenViewProps) => {
             : undefined,
       })
       const { appToken } = tryParseOAuthParams(params)
+      clearOAuthQueryParams()
       if (!appToken) throw new Error('No app token')
 
       loginRequest({ appToken })
@@ -62,20 +62,14 @@ export const NoTokenView = React.memo((props: NoTokenViewProps) => {
       if (error.message === 'Canceled' || error.message === 'Timeout') return
       bugsnag.notify(error, { description })
 
-      alert(`Authentication failed. ${error || ''}`)
+      Alert.alert(`Authentication failed. ${error || ''}`)
     }
   }
 
   return (
     <View style={sharedStyles.flex}>
       <View
-        style={{
-          flex: 1,
-          alignContent: 'center',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: contentPadding,
-        }}
+        style={[sharedStyles.flex, sharedStyles.center, sharedStyles.padding]}
       >
         <GenericMessageWithButtonView
           buttonView={
@@ -94,3 +88,5 @@ export const NoTokenView = React.memo((props: NoTokenViewProps) => {
     </View>
   )
 })
+
+NoTokenView.displayName = 'NoTokenView'

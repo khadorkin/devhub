@@ -1,7 +1,7 @@
+import { Theme, ThemeColors } from '@devhub/core'
 import React, { ReactNode } from 'react'
 import {
   StyleProp,
-  StyleSheet,
   Text,
   TextProps,
   View,
@@ -9,175 +9,114 @@ import {
   ViewStyle,
 } from 'react-native'
 
-import { ThemeColors } from '@devhub/core'
 import { Platform } from '../../libs/platform'
-import { contentPadding, mutedOpacity } from '../../styles/variables'
+import { sharedStyles } from '../../styles/shared'
+import { contentPadding } from '../../styles/variables'
 import { getReadableColor } from '../../utils/helpers/colors'
 import { parseTextWithEmojisToReactComponents } from '../../utils/helpers/github/emojis'
 import { useTheme } from '../context/ThemeContext'
 import { getThemeColorOrItself } from '../themed/helpers'
 
 export interface LabelProps {
-  backgroundThemeColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
-  borderThemeColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
-  children: ReactNode
-  colorThemeColor?:
+  children:
     | string
-    | keyof ThemeColors
-    | ((theme: ThemeColors) => string)
+    | ((labelColors: {
+        backgroundColor: string
+        foregroundColor: string
+      }) => ReactNode)
+  colorThemeColor?: string | keyof ThemeColors | ((theme: Theme) => string)
   containerProps?: ViewProps
   containerStyle?: StyleProp<ViewStyle>
-  enableEmojis?: boolean
-  hideText?: boolean
+  disableEmojis?: boolean
   muted?: boolean
-  outline?: boolean
   radius?: number
   small?: boolean
   textProps?: TextProps
-  textThemeColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
+  textThemeColor?: keyof ThemeColors | ((theme: Theme) => string)
 }
 
-export const hiddenLabelSize = { width: 10, height: 10 }
+export const smallLabelHeight = Platform.OS === 'web' ? 16 : 18
+export const normalLabelHeight = Platform.OS === 'web' ? 18 : 20
 
-export function Label(props: LabelProps) {
+export const Label = React.memo((props: LabelProps) => {
   const theme = useTheme()
 
   const {
-    backgroundThemeColor: _backgroundThemeColor = 'backgroundColor',
-    borderThemeColor: _borderThemeColor,
-    textThemeColor: _textThemeColor,
     children,
     colorThemeColor: _colorThemeColor,
     containerProps = {},
     containerStyle,
-    enableEmojis,
-    hideText,
-    muted,
-    outline,
+    disableEmojis,
     radius,
     small,
     textProps = {},
   } = props
 
-  const backgroundThemeColor = getThemeColorOrItself(
-    theme,
-    _backgroundThemeColor,
-  )!
-  const borderThemeColor = getThemeColorOrItself(theme, _borderThemeColor)
-  const textThemeColor = getThemeColorOrItself(theme, _textThemeColor)
-
-  const color =
-    getThemeColorOrItself(theme, _colorThemeColor) ||
-    theme.foregroundColorMuted60
-
-  const circleColor = getReadableColor(color, backgroundThemeColor, 0.3)
-
-  const backgroundColor = outline
-    ? undefined
-    : hideText
-    ? circleColor
-    : backgroundThemeColor
+  const backgroundColor =
+    getThemeColorOrItself(theme, _colorThemeColor) || theme.foregroundColor
 
   const foregroundColor =
-    textThemeColor ||
-    (backgroundColor
-      ? getReadableColor(backgroundColor, backgroundColor, 0.4)
-      : getReadableColor(color, backgroundThemeColor, 0.4))
+    backgroundColor && backgroundColor !== 'transparent'
+      ? getReadableColor(
+          backgroundColor || backgroundColor,
+          backgroundColor || backgroundColor,
+          0.8,
+        )
+      : getReadableColor(theme.backgroundColor, backgroundColor, 0.8)
 
-  const borderColor =
-    borderThemeColor ||
-    (outline
-      ? foregroundColor
-      : hideText
-      ? backgroundThemeColor
-      : backgroundColor)
-
-  const width = hideText ? hiddenLabelSize.width : undefined
-  const height = hideText ? hiddenLabelSize.height : small ? 16 : 18
+  const height = small ? smallLabelHeight : normalLabelHeight
 
   return (
     <View
       {...containerProps}
       style={[
-        hideText ? { width } : { minWidth: width },
+        sharedStyles.horizontal,
+        sharedStyles.center,
         {
           height,
-          flexDirection: 'row',
-          alignContent: 'center',
-          alignItems: 'center',
-          justifyContent: 'center',
           borderRadius: typeof radius === 'number' ? radius : height / 2,
-          borderWidth: outline ? StyleSheet.hairlineWidth : 0,
+          borderWidth: 0,
+          backgroundColor,
+          paddingHorizontal: (contentPadding / 4) * (small ? 2 : 3),
         },
         containerProps && containerProps.style,
         containerStyle,
-        {
-          borderColor,
-          backgroundColor,
-        },
         Boolean(radius) && { borderRadius: radius },
       ]}
     >
-      {!hideText && (
-        <>
-          {/* <Spacer width={contentPadding / (small ? 3 : 2)} /> */}
-          <View
-            style={[
-              {
-                width: 6,
-                height: 6,
-                marginTop: 1,
-                borderRadius: 6 / 2,
-                backgroundColor: circleColor,
+      {typeof children === 'string' ? (
+        <Text
+          numberOfLines={1}
+          {...textProps}
+          style={[
+            {
+              height,
+              lineHeight: height,
+              fontSize: small ? 11 : 12,
+              color: foregroundColor,
+            },
+            textProps && textProps.style,
+          ]}
+        >
+          {parseTextWithEmojisToReactComponents(children, {
+            key: `label-text-${children}`,
+            imageProps: {
+              style: {
+                marginHorizontal: 2,
+                width: small ? 13 : 14,
+                height: small ? 13 : 14,
               },
-              muted && { opacity: mutedOpacity },
-            ]}
-          />
+            },
+            shouldStripEmojis: disableEmojis,
+          })}
+        </Text>
+      ) : (
+        <>
+          {typeof children === 'function'
+            ? children({ backgroundColor, foregroundColor })
+            : children}
         </>
       )}
-
-      <Text
-        numberOfLines={1}
-        {...textProps}
-        style={[
-          hideText ? { width } : { minWidth: width },
-          {
-            height,
-            lineHeight: height,
-            fontSize: hideText ? 0 : small ? 11 : 12,
-            color: foregroundColor,
-            paddingLeft: hideText ? 0 : contentPadding / (small ? 3 : 2),
-          },
-          textProps && !hideText && textProps.style,
-        ]}
-        {...!!hideText &&
-          Platform.select({
-            web: {
-              title: children && typeof children === 'string' ? children : null,
-            },
-          })}
-      >
-        {hideText
-          ? ''
-          : typeof children === 'string'
-          ? parseTextWithEmojisToReactComponents(children, {
-              key: `label-text-${children}`,
-              imageProps: {
-                style: enableEmojis
-                  ? {
-                      marginHorizontal: 2,
-                      width: small ? 13 : 14,
-                      height: small ? 13 : 14,
-                    }
-                  : {
-                      marginHorizontal: 0,
-                      width: 0,
-                      height: 0,
-                    },
-              },
-            })
-          : children}
-      </Text>
     </View>
   )
-}
+})

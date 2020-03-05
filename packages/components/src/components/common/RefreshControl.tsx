@@ -4,7 +4,6 @@ import {
   RefreshControlProps as RefreshControlPropsOriginal,
 } from 'react-native'
 
-import { Omit } from '@devhub/core'
 import { useTheme } from '../context/ThemeContext'
 import { IntervalRefreshProps } from './IntervalRefresh'
 
@@ -24,9 +23,11 @@ export const RefreshControl = React.memo((props: RefreshControlProps) => {
       colors={[theme.primaryBackgroundColor]}
       progressBackgroundColor={theme.backgroundColorDarker1}
       tintColor={theme.primaryBackgroundColor}
-      titleColor={theme.foregroundColorMuted60}
+      titleColor={theme.foregroundColorMuted65}
       title={title}
       {...otherProps}
     />
   )
 })
+
+RefreshControl.displayName = 'RefreshControl'

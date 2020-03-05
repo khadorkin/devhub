@@ -1,126 +1,96 @@
-import React, { useCallback, useEffect, useRef } from 'react'
-
 import {
   EnhancedGitHubNotification,
   getDefaultPaginationPerPage,
-  getOlderNotificationDate,
+  getOlderOrNewerItemDate,
   NotificationColumnSubscription,
-  Omit,
 } from '@devhub/core'
+import React, { useCallback } from 'react'
+import { useDispatch } from 'react-redux'
+
 import {
   NotificationCards,
   NotificationCardsProps,
 } from '../components/cards/NotificationCards'
 import { NoTokenView } from '../components/cards/NoTokenView'
-import { useReduxAction } from '../hooks/use-redux-action'
+import { useColumn } from '../hooks/use-column'
+import { useColumnData } from '../hooks/use-column-data'
 import { useReduxState } from '../hooks/use-redux-state'
 import * as actions from '../redux/actions'
 import * as selectors from '../redux/selectors'
 
-export type NotificationCardsContainerProps = Omit<
-  NotificationCardsProps,
-  | 'errorMessage'
-  | 'fetchNextPage'
-  | 'items'
-  | 'lastFetchedAt'
-  | 'loadState'
-  | 'refresh'
->
+export interface NotificationCardsContainerProps
+  extends Omit<
+    NotificationCardsProps,
+    | 'column'
+    | 'errorMessage'
+    | 'fetchNextPage'
+    | 'getItemByNodeIdOrId'
+    | 'isShowingOnlyBookmarks'
+    | 'itemNodeIdOrIds'
+    | 'lastFetchSuccessAt'
+    | 'refresh'
+  > {
+  columnId: string
+}
 
 export const NotificationCardsContainer = React.memo(
   (props: NotificationCardsContainerProps) => {
-    const { cardViewMode, column, ...otherProps } = props
+    const { columnId, ...otherProps } = props
+
+    const { column } = useColumn(columnId)
+
+    const dispatch = useDispatch()
 
     const appToken = useReduxState(selectors.appTokenSelector)
-    const githubOAuthToken = useReduxState(selectors.githubOAuthTokenSelector)
+    const githubToken = useReduxState(selectors.githubTokenSelector)
     const githubOAuthScope = useReduxState(selectors.githubOAuthScopeSelector)
 
     // TODO: Support multiple subscriptions per column.
     const mainSubscription = useReduxState(
       useCallback(
-        state => selectors.columnSubscriptionSelector(state, column.id),
-        [column.id],
+        state => selectors.createColumnSubscriptionSelector()(state, columnId),
+        [columnId],
       ),
     ) as NotificationColumnSubscription | undefined
 
-    const data = (mainSubscription && mainSubscription.data) || {}
+    const data = mainSubscription && mainSubscription.data
 
-    const installationsLoadState = useReduxState(
-      selectors.installationsLoadStateSelector,
+    const { allItems, filteredItemsIds, getItemByNodeIdOrId } = useColumnData<
+      EnhancedGitHubNotification
+    >(columnId, { mergeSimilar: false })
+
+    const clearedAt = column && column.filters && column.filters.clearedAt
+    const olderDate = getOlderOrNewerItemDate(
+      'notifications',
+      'older',
+      allItems,
     )
-
-    const fetchColumnSubscriptionRequest = useReduxAction(
-      actions.fetchColumnSubscriptionRequest,
-    )
-
-    const subscriptionsDataSelectorRef = useRef(
-      selectors.createSubscriptionsDataSelector(),
-    )
-
-    const filteredSubscriptionsDataSelectorRef = useRef(
-      selectors.createFilteredSubscriptionsDataSelector(
-        cardViewMode !== 'compact',
-      ),
-    )
-
-    useEffect(() => {
-      subscriptionsDataSelectorRef.current = selectors.createSubscriptionsDataSelector()
-      filteredSubscriptionsDataSelectorRef.current = selectors.createFilteredSubscriptionsDataSelector(
-        cardViewMode !== 'compact',
-      )
-    }, [cardViewMode, ...column.subscriptionIds])
-
-    const allItems = useReduxState(
-      useCallback(
-        state => {
-          return subscriptionsDataSelectorRef.current(
-            state,
-            column.subscriptionIds,
-          )
-        },
-        [column.subscriptionIds, column.filters],
-      ),
-    ) as EnhancedGitHubNotification[]
-
-    const filteredItems = useReduxState(
-      useCallback(
-        state => {
-          return filteredSubscriptionsDataSelectorRef.current(
-            state,
-            column.subscriptionIds,
-            column.filters,
-          )
-        },
-        [column.subscriptionIds, column.filters],
-      ),
-    ) as EnhancedGitHubNotification[]
-
-    const clearedAt = column.filters && column.filters.clearedAt
-    const olderDate = getOlderNotificationDate(allItems)
 
     const canFetchMore =
       clearedAt && (!olderDate || (olderDate && clearedAt >= olderDate))
         ? false
-        : !!data.canFetchMore
+        : !!(data && data.canFetchMore)
 
     const fetchData = useCallback(
       ({ page }: { page?: number } = {}) => {
-        fetchColumnSubscriptionRequest({
-          columnId: column.id,
-          params: {
-            page: page || 1,
-            perPage: getDefaultPaginationPerPage(column.type),
-          },
-          replaceAllItems: false,
-        })
+        dispatch(
+          actions.fetchColumnSubscriptionRequest({
+            columnId,
+            params: {
+              page: page || 1,
+              perPage: getDefaultPaginationPerPage('notifications'),
+            },
+            replaceAllItems: false,
+          }),
+        )
       },
-      [fetchColumnSubscriptionRequest, column.id],
+      [columnId],
     )
 
     const fetchNextPage = useCallback(() => {
       const size = allItems.length
 
-      const perPage = getDefaultPaginationPerPage(column.type)
+      const perPage = getDefaultPaginationPerPage('notifications')
       const currentPage = Math.ceil(size / perPage)
 
       const nextPage = (currentPage || 0) + 1
@@ -136,7 +106,7 @@ export const NotificationCardsContainer = React.memo(
     if (
       !(
         appToken &&
-        githubOAuthToken &&
+        githubToken &&
         githubOAuthScope &&
         githubOAuthScope.includes('notifications')
       )
@@ -144,23 +114,23 @@ export const NotificationCardsContainer = React.memo(
       return <NoTokenView githubAppType="oauth" />
     }
 
+    if (!column) return null
+
     return (
       <NotificationCards
         {...otherProps}
-        key={`notification-cards-${column.id}`}
-        column={column}
-        cardViewMode={cardViewMode}
+        key={`notification-cards-${columnId}`}
+        columnId={columnId}
         errorMessage={mainSubscription.data.errorMessage || ''}
         fetchNextPage={canFetchMore ? fetchNextPage : undefined}
-        items={filteredItems}
-        lastFetchedAt={mainSubscription.data.lastFetchedAt}
-        loadState={
-          installationsLoadState === 'loading' && !filteredItems.length
-            ? 'loading_first'
-            : mainSubscription.data.loadState || 'not_loaded'
-        }
+        getItemByNodeIdOrId={getItemByNodeIdOrId}
+        isShowingOnlyBookmarks={!!(column.filters && column.filters.saved)}
+        itemNodeIdOrIds={filteredItemsIds}
+        lastFetchSuccessAt={mainSubscription.data.lastFetchSuccessAt}
         refresh={refresh}
       />
     )
   },
 )
+
+NotificationCardsContainer.displayName = 'NotificationCardsContainer'

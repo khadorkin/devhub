@@ -1,369 +1,333 @@
-import React, { useCallback, useMemo, useRef } from 'react'
-import { View } from 'react-native'
-
 import {
   Column,
-  constants,
   EnhancedGitHubIssueOrPullRequest,
-  EnhancedLoadState,
-  getDateSmallText,
-  getIssueOrPullRequestSubjectType,
-  isItemRead,
-  Omit,
+  getSearchQueryFromFilter,
 } from '@devhub/core'
-import { useAppViewMode } from '../../hooks/use-app-view-mode'
-import useKeyPressCallback from '../../hooks/use-key-press-callback'
-import { useKeyboardScrolling } from '../../hooks/use-keyboard-scrolling'
-import { useReduxAction } from '../../hooks/use-redux-action'
-import { bugsnag, ErrorBoundary } from '../../libs/bugsnag'
-import { FlatList, FlatListProps } from '../../libs/flatlist'
-import { Platform } from '../../libs/platform'
-import * as actions from '../../redux/actions'
-import { Button } from '../common/Button'
-import { fabSize } from '../common/FAB'
-import { RefreshControl } from '../common/RefreshControl'
-import { Spacer } from '../common/Spacer'
-import { useColumnFilters } from '../context/ColumnFiltersContext'
-import { useFocusedColumn } from '../context/ColumnFocusContext'
-import { useAppLayout } from '../context/LayoutContext'
-import { useTheme } from '../context/ThemeContext'
-import { fabSpacing, shouldRenderFAB } from '../layout/FABRenderer'
-import { EmptyCards, EmptyCardsProps } from './EmptyCards'
-import {
-  IssueOrPullRequestCard,
-  IssueOrPullRequestCardProps,
-} from './IssueOrPullRequestCard'
-import {
-  CardItemSeparator,
-  getCardItemSeparatorThemeColor,
-} from './partials/CardItemSeparator'
-import { SwipeableIssueOrPullRequestCard } from './SwipeableIssueOrPullRequestCard'
+import React, { useCallback, useMemo } from 'react'
+import { View, ViewProps } from 'react-native'
+import { useDispatch, useStore } from 'react-redux'
 
-export interface IssueOrPullRequestCardsProps
-  extends Omit<
-    IssueOrPullRequestCardProps,
-    'isFocused' | 'issueOrPullRequest' | 'type'
-  > {
-  column: Column
-  columnIndex: number
+import { useCardsKeyboard } from '../../hooks/use-cards-keyboard'
+import { DataItemT, useCardsProps } from '../../hooks/use-cards-props'
+import { useReduxState } from '../../hooks/use-redux-state'
+import { BlurView } from '../../libs/blur-view/BlurView'
+import { ErrorBoundary } from '../../libs/bugsnag'
+import { OneList, OneListProps } from '../../libs/one-list'
+import * as actions from '../../redux/actions'
+import * as selectors from '../../redux/selectors'
+import { sharedStyles } from '../../styles/shared'
+import { contentPadding } from '../../styles/variables'
+import { Button } from '../common/Button'
+import { Spacer } from '../common/Spacer'
+import { EmptyCards, EmptyCardsProps } from './EmptyCards'
+import { IssueOrPullRequestCard } from './IssueOrPullRequestCard'
+import { SwipeableCard } from './SwipeableCard'
+
+type ItemT = EnhancedGitHubIssueOrPullRequest
+
+export interface IssueOrPullRequestCardsProps {
+  columnId: Column['id']
   errorMessage: EmptyCardsProps['errorMessage']
   fetchNextPage: (() => void) | undefined
-  items: EnhancedGitHubIssueOrPullRequest[]
-  lastFetchedAt: string | undefined
-  loadState: EnhancedLoadState
-  pointerEvents: FlatListProps<any>['pointerEvents']
+  getItemByNodeIdOrId: (nodeIdOrId: string) => ItemT | undefined
+  isShowingOnlyBookmarks: boolean
+  itemNodeIdOrIds: string[]
+  lastFetchSuccessAt: string | undefined
+  pointerEvents?: ViewProps['pointerEvents']
   refresh: EmptyCardsProps['refresh']
   swipeable: boolean
-}
-
-function keyExtractor(item: EnhancedGitHubIssueOrPullRequest) {
-  return `issue-or-pr-card-${item.id}`
 }
 
 export const IssueOrPullRequestCards = React.memo(
   (props: IssueOrPullRequestCardsProps) => {
     const {
-      cardViewMode,
-      column,
-      columnIndex,
-      enableCompactLabels,
+      columnId,
       errorMessage,
       fetchNextPage,
-      items,
-      lastFetchedAt,
-      loadState,
+      getItemByNodeIdOrId,
+      isShowingOnlyBookmarks,
+      itemNodeIdOrIds,
+      lastFetchSuccessAt,
       pointerEvents,
       refresh,
+      swipeable,
     } = props
 
-    const flatListRef = React.useRef<
-      FlatList<EnhancedGitHubIssueOrPullRequest>
-    >(null)
+    const listRef = React.useRef<typeof OneList>(null)
 
-    const { appViewMode } = useAppViewMode()
-    const { inlineMode } = useColumnFilters()
-    const theme = useTheme()
+    const dispatch = useDispatch()
+    const store = useStore()
 
-    const visibleItemIndexesRef = useRef<number[]>([])
-    const getVisibleItemIndex = useCallback(() => {
-      if (
-        !(visibleItemIndexesRef.current && visibleItemIndexesRef.current.length)
-      )
-        return
+    const getItemKey = useCallback(
+      (nodeIdOrId: DataItemT, index: number) => {
+        return `issue-or-pr-card-${nodeIdOrId || index}`
+      },
+      [getItemByNodeIdOrId],
+    )
 
-      return visibleItemIndexesRef.current[0]
-    }, [])
+    const loggedUsername = useReduxState(
+      selectors.currentGitHubUsernameSelector,
+    )!
 
-    const { selectedItemIdRef } = useKeyboardScrolling(flatListRef, {
-      columnId: column.id,
-      getVisibleItemIndex,
-      items,
+    const {
+      OverrideRender,
+      data,
+      fixedHeaderComponent,
+      footer,
+      getItemSize,
+      getOwnerIsKnownByItemOrNodeIdOrId,
+      header,
+      itemSeparator,
+      onVisibleItemsChanged,
+      refreshControl,
+      repoIsKnown,
+      safeAreaInsets,
+      visibleItemIndexesRef,
+    } = useCardsProps({
+      columnId,
+      fetchNextPage,
+      getItemByNodeIdOrId,
+      itemNodeIdOrIds,
+      lastFetchSuccessAt,
+      refresh,
+      type: 'issue_or_pr',
     })
-    const { focusedColumnId } = useFocusedColumn()
 
-    const hasSelectedItem =
-      !!selectedItemIdRef.current && column.id === focusedColumnId
+    useCardsKeyboard(listRef, {
+      columnId,
+      getItemByNodeIdOrId,
+      getOwnerIsKnownByItemOrNodeIdOrId,
+      itemNodeIdOrIds:
+        OverrideRender && OverrideRender.Component && OverrideRender.overlay
+          ? []
+          : itemNodeIdOrIds,
+      repoIsKnown,
+      type: 'issue_or_pr',
+      visibleItemIndexesRef,
+    })
 
-    const markItemsAsReadOrUnread = useReduxAction(
-      actions.markItemsAsReadOrUnread,
-    )
-    const saveItemsForLater = useReduxAction(actions.saveItemsForLater)
-
-    useKeyPressCallback(
-      's',
-      useCallback(() => {
-        const selectedItem =
-          hasSelectedItem &&
-          items.find(item => item.id === selectedItemIdRef.current)
-        if (!selectedItem) return
-
-        saveItemsForLater({
-          itemIds: [selectedItemIdRef.current!],
-          save: !selectedItem.saved,
-        })
-      }, [hasSelectedItem, items]),
+    const mainSubscription = useReduxState(
+      useCallback(
+        state =>
+          selectors.createColumnSubscriptionSelector()(state, columnId || ''),
+        [columnId],
+      ),
     )
 
-    useKeyPressCallback(
-      'r',
-      useCallback(() => {
-        const selectedItem =
-          hasSelectedItem &&
-          items.find(item => item.id === selectedItemIdRef.current)
-        if (!selectedItem) return
+    const renderItem = useCallback<
+      NonNullable<OneListProps<DataItemT>['renderItem']>
+    >(
+      ({ item: nodeIdOrId, index }) => {
+        const height = getItemSize(nodeIdOrId, index)
 
-        markItemsAsReadOrUnread({
-          type: 'issue_or_pr',
-          itemIds: [selectedItemIdRef.current!],
-          unread: isItemRead(selectedItem),
-        })
-      }, [hasSelectedItem, items]),
-    )
+        if (swipeable) {
+          return (
+            <View style={{ height }}>
+              <SwipeableCard
+                type="issue_or_pr"
+                columnId={columnId}
+                nodeIdOrId={nodeIdOrId}
+                ownerIsKnown={getOwnerIsKnownByItemOrNodeIdOrId(nodeIdOrId)}
+                repoIsKnown={repoIsKnown}
+              />
+            </View>
+          )
+        }
 
-    const setColumnClearedAtFilter = useReduxAction(
-      actions.setColumnClearedAtFilter,
-    )
-
-    const _handleViewableItemsChanged: FlatListProps<
-      EnhancedGitHubIssueOrPullRequest
-    >['onViewableItemsChanged'] = ({ viewableItems }) => {
-      visibleItemIndexesRef.current = viewableItems
-        .filter(v => v.isViewable && typeof v.index === 'number')
-        .map(v => v.index!)
-    }
-    const handleViewableItemsChanged = useCallback(
-      _handleViewableItemsChanged,
-      [],
-    )
-
-    const viewabilityConfig = useMemo(
-      () => ({
-        itemVisiblePercentThreshold: 100,
-      }),
-      [],
-    )
-
-    const _renderItem = ({
-      item,
-    }: {
-      item: EnhancedGitHubIssueOrPullRequest
-      index: number
-    }) => {
-      if (props.swipeable) {
         return (
-          <SwipeableIssueOrPullRequestCard
-            cardViewMode={cardViewMode}
-            enableCompactLabels={enableCompactLabels}
-            isFocused={
-              column.id === focusedColumnId &&
-              item.id === selectedItemIdRef.current
+          <ErrorBoundary>
+            <View style={{ height }}>
+              <IssueOrPullRequestCard
+                repoIsKnown={repoIsKnown}
+                ownerIsKnown={getOwnerIsKnownByItemOrNodeIdOrId(nodeIdOrId)}
+                nodeIdOrId={nodeIdOrId}
+                columnId={columnId}
+              />
+            </View>
+          </ErrorBoundary>
+        )
+      },
+      [getOwnerIsKnownByItemOrNodeIdOrId, repoIsKnown, swipeable],
+    )
+
+    const ListEmptyComponent = useMemo<
+      NonNullable<OneListProps<DataItemT>['ListEmptyComponent']>
+    >(
+      () => () => {
+        if (
+          OverrideRender &&
+          OverrideRender.Component &&
+          OverrideRender.overlay
+        )
+          return null
+
+        if (isShowingOnlyBookmarks) {
+          return (
+            <EmptyCards
+              clearEmoji="bookmark"
+              clearMessage="No bookmarks matching your filters"
+              columnId={columnId}
+              disableLoadingIndicator
+              errorMessage={errorMessage}
+              fetchNextPage={fetchNextPage}
+              refresh={refresh}
+            />
+          )
+        }
+
+        const column = selectors.columnSelector(store.getState(), columnId)
+
+        const maybeInvalidFilters = `${errorMessage || ''}`
+          .toLowerCase()
+          .startsWith('validation failed')
+        const messageHasMoreDetails =
+          `${errorMessage || ''}` !== 'validation failed'
+        const emptyFilters =
+          maybeInvalidFilters &&
+          !getSearchQueryFromFilter('issue_or_pr', column && column.filters)
+
+        if (maybeInvalidFilters) {
+          return (
+            <EmptyCards
+              columnId={columnId}
+              disableLoadingIndicator
+              emoji={emptyFilters ? 'desert' : 'squirrel'}
+              errorButtonView={
+                <View>
+                  <Button
+                    analyticsLabel="try_fix_invalid_filter"
+                    children={`Add "owner:${loggedUsername ||
+                      'gaearon'}" filter`}
+                    onPress={() =>
+                      dispatch(
+                        actions.setColumnOwnerFilter({
+                          columnId,
+                          owner: loggedUsername || 'gaearon',
+                          value: true,
+                        }),
+                      )
+                    }
+                  />
+
+                  <Spacer height={contentPadding / 2} />
+
+                  <Button
+                    analyticsLabel="try_fix_invalid_filter"
+                    children={`Add "involves:${loggedUsername ||
+                      'gaearon'}" filter`}
+                    onPress={() =>
+                      dispatch(
+                        actions.setColumnInvolvesFilter({
+                          columnId,
+                          user: loggedUsername || 'gaearon',
+                          value: true,
+                        }),
+                      )
+                    }
+                  />
+                </View>
+              }
+              errorMessage={
+                emptyFilters
+                  ? `You need to add some filters for this search to work. \nExample: author:${loggedUsername ||
+                      'gaearon'}`
+                  : `Something went wrong. Try changing your search query. \n${
+                      messageHasMoreDetails
+                        ? errorMessage
+                        : `Example: author:${loggedUsername || 'gaearon'}`
+                    }`
+              }
+              errorTitle={
+                emptyFilters ? 'Empty search' : 'Check your search query'
+              }
+              fetchNextPage={undefined}
+              refresh={undefined}
+            />
+          )
+        }
+
+        return (
+          <EmptyCards
+            columnId={columnId}
+            disableLoadingIndicator={
+              !!(
+                mainSubscription &&
+                mainSubscription.data &&
+                mainSubscription.data.lastFetchSuccessAt
+              )
             }
-            issueOrPullRequest={item}
-            repoIsKnown={props.repoIsKnown}
-            swipeable={props.swipeable}
-            type={getIssueOrPullRequestSubjectType(item) || 'Issue'}
+            errorMessage={errorMessage}
+            fetchNextPage={fetchNextPage}
+            refresh={refresh}
           />
         )
-      }
-
-      return (
-        <ErrorBoundary>
-          <IssueOrPullRequestCard
-            cardViewMode={cardViewMode}
-            enableCompactLabels={enableCompactLabels}
-            isFocused={
-              column.id === focusedColumnId &&
-              item.id === selectedItemIdRef.current
-            }
-            issueOrPullRequest={item}
-            repoIsKnown={props.repoIsKnown}
-            swipeable={props.swipeable}
-            type={getIssueOrPullRequestSubjectType(item) || 'Issue'}
-          />
-        </ErrorBoundary>
-      )
-    }
-    const renderItem = useCallback(_renderItem, [
-      cardViewMode,
-      column.id === focusedColumnId && selectedItemIdRef.current,
-      enableCompactLabels,
-      props.repoIsKnown,
-      props.swipeable,
-    ])
-
-    const renderFooter = useCallback(() => {
-      const { sizename } = useAppLayout()
-
-      return (
-        <>
-          <CardItemSeparator isRead />
-
-          {fetchNextPage ? (
-            <View>
-              <Button
-                analyticsLabel={
-                  loadState === 'error' ? 'try_again' : 'load_more'
-                }
-                children={
-                  loadState === 'error' ? 'Oops. Try again' : 'Load more'
-                }
-                disabled={loadState !== 'loaded'}
-                loading={
-                  loadState === 'loading_first' || loadState === 'loading_more'
-                }
-                onPress={fetchNextPage}
-                round={false}
-              />
-            </View>
-          ) : column.filters && column.filters.clearedAt ? (
-            <View>
-              <Button
-                analyticsLabel="show_cleared"
-                borderOnly
-                children="Show cleared items"
-                disabled={loadState !== 'loaded'}
-                onPress={() => {
-                  setColumnClearedAtFilter({
-                    clearedAt: null,
-                    columnId: column.id,
-                  })
-
-                  if (refresh) refresh()
-                }}
-                round={false}
-              />
-            </View>
-          ) : null}
-
-          {shouldRenderFAB({ sizename }) && (
-            <Spacer height={fabSize + 2 * fabSpacing} />
-          )}
-        </>
-      )
-    }, [
-      fetchNextPage,
-      loadState,
-      column.filters && column.filters.clearedAt,
-      column.id,
-      refresh,
-    ])
-
-    const _onScrollToIndexFailed: FlatListProps<
-      string
-    >['onScrollToIndexFailed'] = (info: {
-      index: number
-      highestMeasuredFrameIndex: number
-      averageItemLength: number
-    }) => {
-      console.error(info)
-      bugsnag.notify({
-        name: 'ScrollToIndexFailed',
-        message: 'Failed to scroll to index',
-        ...info,
-      })
-    }
-    const onScrollToIndexFailed = useCallback(_onScrollToIndexFailed, [])
-
-    const refreshControl = useMemo(
-      () => (
-        <RefreshControl
-          intervalRefresh={lastFetchedAt}
-          onRefresh={refresh}
-          refreshing={loadState === 'loading' || loadState === 'loading_first'}
-          title={
-            lastFetchedAt
-              ? `Last updated ${getDateSmallText(lastFetchedAt, true)}`
-              : 'Pull to refresh'
-          }
-        />
-      ),
-      [lastFetchedAt, refresh, loadState],
+      },
+      [
+        itemNodeIdOrIds.length ? undefined : columnId,
+        itemNodeIdOrIds.length ? undefined : errorMessage,
+        itemNodeIdOrIds.length ? undefined : fetchNextPage,
+        itemNodeIdOrIds.length ? undefined : refresh,
+        itemNodeIdOrIds.length ? undefined : loggedUsername,
+        itemNodeIdOrIds.length ? undefined : isShowingOnlyBookmarks,
+        itemNodeIdOrIds.length
+          ? undefined
+          : !!(
+              OverrideRender &&
+              OverrideRender.Component &&
+              OverrideRender.overlay
+            ),
+      ],
     )
 
-    const rerender = useMemo(() => ({}), [renderItem, renderFooter])
-
-    const contentContainerStyle = useMemo(
-      () => ({
-        borderWidth: appViewMode === 'single-column' && inlineMode ? 1 : 0,
-        borderColor:
-          theme[getCardItemSeparatorThemeColor(theme.backgroundColor, true)],
-      }),
-      [theme],
-    )
-
-    if (columnIndex && columnIndex >= constants.COLUMNS_LIMIT) {
-      return (
-        <EmptyCards
-          clearedAt={column.filters && column.filters.clearedAt}
-          columnId={column.id}
-          errorMessage={`You have reached the limit of ${
-            constants.COLUMNS_LIMIT
-          } columns. This is to maintain a healthy usage of the GitHub API.`}
-          errorTitle="Too many columns"
-          fetchNextPage={undefined}
-          loadState="error"
-          refresh={undefined}
-        />
-      )
-    }
-
-    if (!(items && items.length)) {
-      return (
-        <EmptyCards
-          clearedAt={column.filters && column.filters.clearedAt}
-          columnId={column.id}
-          errorMessage={errorMessage}
-          fetchNextPage={fetchNextPage}
-          loadState={loadState}
-          refresh={refresh}
-        />
-      )
-    }
+    if (OverrideRender && OverrideRender.Component && !OverrideRender.overlay)
+      return <OverrideRender.Component />
 
     return (
-      <FlatList
-        ref={flatListRef}
-        key="issue-or-pr-cards-flat-list"
-        ItemSeparatorComponent={CardItemSeparator}
-        ListFooterComponent={renderFooter}
-        alwaysBounceVertical
-        bounces
-        contentContainerStyle={contentContainerStyle}
-        data={items}
-        disableVirtualization={Platform.OS === 'web'}
-        extraData={rerender}
-        initialNumToRender={15}
-        keyExtractor={keyExtractor}
-        maxToRenderPerBatch={3}
-        onScrollToIndexFailed={onScrollToIndexFailed}
-        onViewableItemsChanged={handleViewableItemsChanged}
-        pointerEvents={pointerEvents}
-        refreshControl={refreshControl}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        renderItem={renderItem}
-        viewabilityConfig={viewabilityConfig}
-        windowSize={2}
-      />
+      <View style={sharedStyles.flex}>
+        {fixedHeaderComponent}
+
+        <OneList
+          ref={listRef}
+          key="issue-or-pr-cards-list"
+          ListEmptyComponent={ListEmptyComponent}
+          containerStyle={
+            OverrideRender && OverrideRender.Component && OverrideRender.overlay
+              ? sharedStyles.superMuted
+              : undefined
+          }
+          data={data}
+          estimatedItemSize={getItemSize(data[0], 0) || 89}
+          footer={footer}
+          forceRerenderOnRefChange={getItemByNodeIdOrId}
+          getItemKey={getItemKey}
+          getItemSize={getItemSize}
+          header={header}
+          horizontal={false}
+          itemSeparator={itemSeparator}
+          onVisibleItemsChanged={onVisibleItemsChanged}
+          overscanCount={1}
+          pointerEvents={
+            OverrideRender && OverrideRender.Component && OverrideRender.overlay
+              ? 'none'
+              : pointerEvents
+          }
+          refreshControl={refreshControl}
+          renderItem={renderItem}
+          safeAreaInsets={safeAreaInsets}
+        />
+
+        {!!(
+          OverrideRender &&
+          OverrideRender.Component &&
+          OverrideRender.overlay
+        ) && (
+          <BlurView intensity={8} style={sharedStyles.absoluteFill}>
+            <OverrideRender.Component />
+          </BlurView>
+        )}
+      </View>
     )
   },
 )
+
+IssueOrPullRequestCards.displayName = 'IssueOrPullRequestCards'

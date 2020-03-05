@@ -1,112 +1,98 @@
-import { getLuminance } from 'polished'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Dimensions, View } from 'react-native'
-
 import {
-  activityColumnHasAnyFilter,
-  CardViewMode,
-  Column as ColumnType,
+  Column as ColumnT,
+  columnHasAnyFilter,
+  constants,
   EnhancedGitHubEvent,
   EnhancedGitHubIssueOrPullRequest,
   EnhancedGitHubNotification,
   EnhancedItem,
+  formatPriceAndInterval,
+  getDateSmallText,
   getDefaultPaginationPerPage,
+  getItemNodeIdOrId,
   GitHubIcon,
   isEventPrivate,
   isItemRead,
+  isItemSaved,
   isNotificationPrivate,
-  notificationColumnHasAnyFilter,
+  isPlanStatusValid,
   ThemeColors,
 } from '@devhub/core'
+import React, { useCallback, useRef } from 'react'
+import { Dimensions, StyleSheet, View } from 'react-native'
+import { useDispatch, useStore } from 'react-redux'
+
 import { useAppViewMode } from '../../hooks/use-app-view-mode'
-import { useEmitter } from '../../hooks/use-emitter'
-import { useReduxAction } from '../../hooks/use-redux-action'
+import { useColumnData } from '../../hooks/use-column-data'
 import { useReduxState } from '../../hooks/use-redux-state'
-import { useRepoTableColumnWidth } from '../../hooks/use-repo-table-column-width'
+import { AutoSizer } from '../../libs/auto-sizer'
 import { emitter } from '../../libs/emitter'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
+import { contentPadding } from '../../styles/variables'
 import {
-  columnHeaderHeight,
-  contentPadding,
-  sidebarSize,
-} from '../../styles/variables'
-import { FreeTrialHeaderMessage } from '../common/FreeTrialHeaderMessage'
-import { separatorSize, separatorThickSize } from '../common/Separator'
-import { Spacer } from '../common/Spacer'
-import { useColumnFilters } from '../context/ColumnFiltersContext'
+  FreeTrialHeaderMessage,
+  FreeTrialHeaderMessageProps,
+} from '../common/FreeTrialHeaderMessage'
 import { useColumnWidth } from '../context/ColumnWidthContext'
 import { useAppLayout } from '../context/LayoutContext'
-import { useTheme } from '../context/ThemeContext'
-import { ViewMeasurer } from '../render-props/ViewMeasure'
+import { usePlans } from '../context/PlansContext'
 import { Column } from './Column'
+import { ColumnFiltersRenderer } from './ColumnFiltersRenderer'
 import { ColumnHeader } from './ColumnHeader'
-import { ColumnHeaderItem } from './ColumnHeaderItem'
-import { ColumnOptionsRenderer } from './ColumnOptionsRenderer'
+import { ColumnOptionsAccordion } from './ColumnOptionsAccordion'
 
-export function getColumnCardThemeColors(
-  backgroundColor: string,
-): {
+export function getColumnCardThemeColors({
+  isDark,
+}: {
+  isDark: boolean
+}): {
   column: keyof ThemeColors
-  unread: keyof ThemeColors
-  unread__hover: keyof ThemeColors
-  read: keyof ThemeColors
-  read__hover: keyof ThemeColors
+  card: keyof ThemeColors
+  card__hover: keyof ThemeColors
+  card__muted: keyof ThemeColors
+  card__muted_hover: keyof ThemeColors
 } {
-  const luminance = getLuminance(backgroundColor)
-
-  if (luminance <= 0.02) {
-    return {
-      column: 'backgroundColor',
-      read: 'backgroundColor',
-      read__hover: 'backgroundColorLighther2',
-      unread: 'backgroundColorLighther3',
-      unread__hover: 'backgroundColorLighther4',
-    }
-  }
-
-  if (luminance >= 0.6) {
-    return {
-      column: 'backgroundColor',
-      read: 'backgroundColorDarker1',
-      read__hover: 'backgroundColorDarker2',
-      unread: 'backgroundColorLighther1',
-      unread__hover: 'backgroundColorLighther2',
-    }
-  }
-
   return {
+    card: 'backgroundColorLighther1',
+    card__hover: isDark ? 'backgroundColorLighther2' : 'backgroundColorDarker1',
+    card__muted: isDark ? 'backgroundColor' : 'backgroundColorDarker1',
+    card__muted_hover: isDark
+      ? 'backgroundColorLighther1'
+      : 'backgroundColorDarker2',
     column: 'backgroundColor',
-    read: 'backgroundColor',
-    read__hover: 'backgroundColorDarker1',
-    unread: 'backgroundColorLighther2',
-    unread__hover: 'backgroundColorLighther3',
   }
 }
 
-export function getCardBackgroundThemeColor(
-  theme: ThemeColors,
-  { isRead }: { isRead: boolean },
-) {
-  const backgroundThemeColors = getColumnCardThemeColors(theme.backgroundColor)
+export function getCardBackgroundThemeColor({
+  isDark,
+  isMuted,
+  isHovered,
+}: {
+  isDark: boolean
+  isMuted: boolean
+  isHovered?: boolean
+}) {
+  const backgroundThemeColors = getColumnCardThemeColors({ isDark })
 
   const _backgroundThemeColor =
-    // (isFocused && 'backgroundColorLess2') ||
-    (isRead && backgroundThemeColors.read) || backgroundThemeColors.unread
+    (isMuted &&
+      (isHovered
+        ? backgroundThemeColors.card__muted_hover
+        : backgroundThemeColors.card__muted)) ||
+    (isHovered ? backgroundThemeColors.card__hover : backgroundThemeColors.card)
 
   return _backgroundThemeColor
 }
 
 export interface ColumnRendererProps {
-  avatarRepo?: string
-  avatarUsername?: string
-  children: (p: {
-    cardViewMode: CardViewMode
-    enableCompactLabels: boolean
-  }) => React.ReactNode
-  column: ColumnType
-  disableColumnOptions?: boolean
+  avatarImageURL?: string
+  avatarLinkURL?: string
+  children: React.ReactNode
+  columnId: string
+  columnIndex: number
+  columnType: ColumnT['type']
   icon: GitHubIcon
   owner: string | undefined
   pagingEnabled?: boolean
@@ -118,11 +104,12 @@ export interface ColumnRendererProps {
 
 export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
   const {
-    avatarRepo,
-    avatarUsername,
+    avatarImageURL,
+    avatarLinkURL,
     children,
-    column,
-    disableColumnOptions,
+    columnId,
+    columnIndex,
+    columnType,
     icon,
     owner,
     pagingEnabled,
@@ -132,70 +119,23 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
     title,
   } = props
 
-  const [_isLocalFiltersOpened, setIsLocalFiltersOpened] = useState(false)
-  const {
-    enableSharedFiltersView,
-    fixedWidth,
-    inlineMode,
-    isSharedFiltersOpened: _isSharedFiltersOpened,
-  } = useColumnFilters()
-  const isFiltersOpened = enableSharedFiltersView
-    ? _isSharedFiltersOpened
-    : _isLocalFiltersOpened
-
-  const { appOrientation } = useAppLayout()
-  const {
-    appViewMode,
-    getCardViewMode,
-    getEnableCompactLabels,
-  } = useAppViewMode()
+  const columnOptionsRef = useRef<ColumnOptionsAccordion>(null)
+  const appLayout = useAppLayout()
+  const { appOrientation } = appLayout
+  const appViewModeresult = useAppViewMode()
+  const { appViewMode } = appViewModeresult
   const columnWidth = useColumnWidth()
-  const repoTableColumnWidth = useRepoTableColumnWidth()
-
-  const filteredSubscriptionsDataSelectorRef = useRef(
-    selectors.createFilteredSubscriptionsDataSelector(false),
-  )
-
-  const columnRef = useRef<View>(null)
-  useTheme(theme => {
-    if (!columnRef.current) return
-
-    columnRef.current!.setNativeProps({
-      style: {
-        backgroundColor:
-          theme[getColumnCardThemeColors(theme.backgroundColor).column],
-      },
-    })
+  const columnData = useColumnData(columnId, {
+    mergeSimilar: false,
   })
+  const { hasCrossedColumnsLimit, filteredItems } = columnData
 
-  useEffect(() => {
-    filteredSubscriptionsDataSelectorRef.current = selectors.createFilteredSubscriptionsDataSelector(
-      false,
-    )
-  }, column.subscriptionIds)
-
-  useEmitter(
-    'TOGGLE_COLUMN_FILTERS',
-    payload => {
-      if (payload.columnId !== column.id) return
-      if (enableSharedFiltersView) return
-      setIsLocalFiltersOpened(v => !v)
-    },
-    [column.id, enableSharedFiltersView],
-  )
-
-  const filteredItems = useReduxState(
-    useCallback(
-      state => {
-        return filteredSubscriptionsDataSelectorRef.current(
-          state,
-          column.subscriptionIds,
-          column.filters,
-        )
-      },
-      [column.subscriptionIds, column.filters],
-    ),
-  )
+  const { cheapestPlanWithNotifications } = usePlans()
+  const columnsCount = useReduxState(selectors.columnCountSelector)
+  const plan = useReduxState(selectors.currentUserPlanSelector)
+  const isPlanExpired = useReduxState(selectors.isPlanExpiredSelector)
+  const dispatch = useDispatch()
+  const store = useStore()
 
   const clearableItems = (filteredItems as any[]).filter(
     (
@@ -204,68 +144,112 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
         | EnhancedGitHubNotification
         | EnhancedGitHubIssueOrPullRequest,
     ) => {
-      return !!(item && !item.saved) /* && isItemRead(item) */
+      return !!(item && !isItemSaved(item)) /* && isItemRead(item) */
     },
   )
 
-  const hasValidPaidPlan = false // TODO
+  const showBannerForPaidFeature: FreeTrialHeaderMessageProps | undefined =
+    isPlanExpired && plan && plan.trialEndAt
+      ? {
+          backgroundColor: 'backgroundColorDarker1',
+          foregroundColor: 'foregroundColorMuted65',
+          intervalRefresh: { date: plan.trialEndAt },
+          message: () =>
+            `${plan.amount ? 'Trial' : 'Free trial'} ${getDateSmallText(
+              plan.trialEndAt,
+              {
+                pastPrefix: 'ended',
+                futurePrefix: '',
+                showPrefixOnFullDate: true,
 
-  const isFreeTrial =
-    !hasValidPaidPlan &&
-    (column.type === 'activity'
-      ? (filteredItems as any[]).some((item: EnhancedGitHubEvent) =>
-          isEventPrivate(item),
-        )
-      : column.type === 'notifications'
-      ? (filteredItems as any[]).some(
-          (item: EnhancedGitHubNotification) =>
-            isNotificationPrivate(item) && !!item.enhanced,
-        )
-      : false) // TODO: Handle for IssueOrPullRequest Column
+                pastSuffix: 'ago',
+                futureSuffix: 'left',
+                showSuffixOnFullDate: false,
+              },
+            )}`,
+        }
+      : plan &&
+        plan.featureFlags.columnsLimit >= 1 &&
+        columnIndex + 1 > plan.featureFlags.columnsLimit
+      ? columnIndex + 1 === plan.featureFlags.columnsLimit &&
+        columnIndex + 1 === columnsCount &&
+        columnIndex + 1 <= constants.COLUMNS_LIMIT
+        ? {
+            message: 'Columns limit reached. Tap for more.',
+            relatedFeature: 'columnsLimit',
+          }
+        : undefined
+      : (!(
+          plan &&
+          isPlanStatusValid(plan) &&
+          plan.featureFlags.enablePrivateRepositories
+        ) &&
+          (columnType === 'activity'
+            ? (filteredItems as any[]).some((item: EnhancedGitHubEvent) =>
+                isEventPrivate(item),
+              )
+            : columnType === 'notifications'
+            ? (filteredItems as any[]).some(
+                (item: EnhancedGitHubNotification) =>
+                  isNotificationPrivate(item) && !!item.enhanced,
+              )
+            : // TODO: Handle for IssueOrPullRequest Column
+              undefined) && {
+            message:
+              cheapestPlanWithNotifications &&
+              cheapestPlanWithNotifications.amount
+                ? `Unlock private repos for ${formatPriceAndInterval(
+                    cheapestPlanWithNotifications,
+                  )}`
+                : 'Tap to unlock Private Repositories',
+            relatedFeature: 'enablePrivateRepositories',
+          }) ||
+        (plan &&
+        plan.status === 'trialing' &&
+        plan.trialEndAt &&
+        new Date(plan.trialEndAt).valueOf() - Date.now() <
+          1000 * 60 * 60 * 24 * 14
+          ? {
+              intervalRefresh: { date: plan.trialEndAt },
+              message: () =>
+                `${plan.amount ? 'Trial' : 'Free trial'} (${getDateSmallText(
+                  plan.trialEndAt,
+                  {
+                    pastPrefix: 'ended',
+                    futurePrefix: '',
+                    showPrefixOnFullDate: true,
 
-  const setColumnClearedAtFilter = useReduxAction(
-    actions.setColumnClearedAtFilter,
-  )
-
-  const markItemsAsReadOrUnread = useReduxAction(
-    actions.markItemsAsReadOrUnread,
-  )
-
-  const markAllNotificationsAsReadOrUnread = useReduxAction(
-    actions.markAllNotificationsAsReadOrUnread,
-  )
-
-  const markRepoNotificationsAsReadOrUnread = useReduxAction(
-    actions.markRepoNotificationsAsReadOrUnread,
-  )
-
-  const fetchColumnSubscriptionRequest = useReduxAction(
-    actions.fetchColumnSubscriptionRequest,
-  )
+                    pastSuffix: 'ago',
+                    futureSuffix: 'left',
+                    showSuffixOnFullDate: false,
+                  },
+                )})`,
+            }
+          : undefined)
 
   const refresh = useCallback(() => {
-    fetchColumnSubscriptionRequest({
-      columnId: column.id,
-      params: { page: 1, perPage: getDefaultPaginationPerPage(column.type) },
-      replaceAllItems: false,
-    })
-  }, [fetchColumnSubscriptionRequest, column.id])
+    dispatch(
+      actions.fetchColumnSubscriptionRequest({
+        columnId,
+        params: { page: 1, perPage: getDefaultPaginationPerPage(columnType) },
+        replaceAllItems: false,
+      }),
+    )
+  }, [columnId])
 
   function focusColumn() {
     emitter.emit('FOCUS_ON_COLUMN', {
-      columnId: column.id,
+      columnId,
       highlight: false,
       scrollTo: false,
     })
   }
 
-  function toggleColumnFilters() {
-    emitter.emit('TOGGLE_COLUMN_FILTERS', { columnId: column.id })
-  }
-
   const toggleOptions = () => {
+    if (!columnOptionsRef.current) return
+
     focusColumn()
-    toggleColumnFilters()
+    columnOptionsRef.current.toggle()
   }
 
   const hasOneUnreadItem = (filteredItems as any[]).some(
@@ -277,211 +261,179 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
     ) => !isItemRead(item),
   )
 
-  const estimatedContainerHeight =
-    appOrientation === 'portrait'
-      ? Dimensions.get('window').height - columnHeaderHeight - sidebarSize - 2
-      : Dimensions.get('window').height - columnHeaderHeight - 1
+  const renderLeftSeparator =
+    appViewMode === 'multi-column' &&
+    !(columnIndex === 0 && appOrientation === 'landscape')
 
-  const estimatedInitialCardWidth =
-    appViewMode === 'multi-column'
-      ? columnWidth
-      : Dimensions.get('window').width -
-        (enableSharedFiltersView && inlineMode ? fixedWidth : 0) -
-        (appOrientation !== 'portrait'
-          ? sidebarSize + 2 * separatorThickSize
-          : separatorSize)
+  const renderRightSeparator = appViewMode === 'multi-column'
 
   return (
     <Column
-      key={`column-renderer-${column.id}-inner-container`}
-      ref={columnRef}
-      columnId={column.id}
-      fullWidth={appViewMode === 'single-column'}
+      key={`column-renderer-${columnId}-inner-container`}
+      backgroundColor={getColumnCardThemeColors({ isDark: false }).column}
+      columnId={columnId}
       pagingEnabled={pagingEnabled}
-      renderSideSeparators
+      renderLeftSeparator={renderLeftSeparator}
+      renderRightSeparator={renderRightSeparator}
     >
-      <ColumnHeader key={`column-renderer-${column.id}-header`}>
-        <ColumnHeaderItem
-          analyticsLabel={undefined}
-          avatarProps={
-            avatarRepo || avatarUsername
-              ? { repo: avatarRepo, username: avatarUsername }
-              : undefined
-          }
-          fixedIconSize
-          iconName={icon}
-          style={[sharedStyles.flex, { alignItems: 'flex-start' }]}
-          subtitle={`${subtitle || ''}`.toLowerCase()}
-          title={`${title || ''}`.toLowerCase()}
-          tooltip={undefined}
-        />
-
-        <Spacer width={contentPadding / 2} />
-
-        <ColumnHeaderItem
-          key="column-options-button-clear-column"
-          analyticsLabel={
-            clearableItems.length ? 'clear_column' : 'unclear_column'
-          }
-          enableForegroundHover={!!clearableItems.length}
-          fixedIconSize
-          iconName="check"
-          onPress={() => {
-            setColumnClearedAtFilter({
-              columnId: column.id,
-              clearedAt: clearableItems.length
-                ? new Date().toISOString()
-                : null,
-            })
-
-            focusColumn()
-
-            if (!clearableItems.length) refresh()
-          }}
-          style={{
-            paddingHorizontal: contentPadding / 3,
-            opacity: clearableItems.length ? 1 : 0.5,
-          }}
-          tooltip={clearableItems.length ? 'Clear items' : 'Show cleared items'}
-        />
-
-        <ColumnHeaderItem
-          key="column-options-button-toggle-mark-as-read"
-          analyticsLabel={!hasOneUnreadItem ? 'mark_as_unread' : 'mark_as_read'}
-          disabled={!filteredItems.length}
-          enableForegroundHover
-          fixedIconSize
-          iconName={!hasOneUnreadItem ? 'mail-read' : 'mail'}
-          onPress={() => {
-            const unread = !hasOneUnreadItem
-
-            const visibleItemIds = (filteredItems as any[]).map(
-              (item: EnhancedItem) => item && item.id,
-            )
-
-            const hasAnyFilter =
-              column.type === 'notifications'
-                ? notificationColumnHasAnyFilter({
-                    ...column.filters,
-                    clearedAt: undefined,
-                  })
-                : column.type === 'activity'
-                ? activityColumnHasAnyFilter({
-                    ...column.filters,
-                    clearedAt: undefined,
-                  })
-                : false
-
-            // column doesnt have any filter,
-            // so lets mark ALL notifications on github as read at once,
-            // instead of marking only the visible items one by one
-            if (column.type === 'notifications' && !hasAnyFilter && !unread) {
-              if (repoIsKnown) {
-                if (owner && repo) {
-                  markRepoNotificationsAsReadOrUnread({
-                    owner,
-                    repo,
-                    unread,
-                  })
-
-                  return
-                }
-              } else {
-                markAllNotificationsAsReadOrUnread({ unread })
-                return
-              }
-            }
-
-            // mark only the visible items as read/unread one by one
-            markItemsAsReadOrUnread({
-              type: column.type,
-              itemIds: visibleItemIds,
-              unread,
-            })
-
-            focusColumn()
-          }}
-          style={{
-            paddingHorizontal: contentPadding / 3,
-          }}
-          tooltip={
-            !hasOneUnreadItem ? 'Mark all as unread' : 'Mark all as read'
-          }
-        />
-
-        {!disableColumnOptions && (
-          <ColumnHeaderItem
-            key="column-options-button-toggle-column-options"
-            analyticsAction={isFiltersOpened ? 'hide' : 'show'}
-            analyticsLabel="column_options"
-            enableForegroundHover
-            fixedIconSize
-            iconName="settings"
-            onPress={toggleOptions}
-            style={{
-              paddingHorizontal: contentPadding / 3,
-            }}
-            tooltip="Filters"
-          />
-        )}
-      </ColumnHeader>
-
-      <ViewMeasurer
-        key="column-renderer-view-measurer"
-        initialResult={estimatedContainerHeight}
-        mapper={({ height }) => height}
-        style={sharedStyles.flex}
-      >
-        {(containerHeight: number) => (
+      <ColumnHeader
+        key={`column-renderer-${columnId}-header`}
+        columnId={columnId}
+        title={title}
+        subtitle={subtitle}
+        style={{ paddingRight: contentPadding / 2 }}
+        {...(avatarImageURL
+          ? { avatar: { imageURL: avatarImageURL, linkURL: avatarLinkURL! } }
+          : { icon })}
+        right={
           <>
-            {!disableColumnOptions && !enableSharedFiltersView && (
-              <ColumnOptionsRenderer
-                key="column-options-renderer"
-                close={toggleOptions}
-                columnId={column.id}
-                containerHeight={containerHeight}
-                fixedPosition="right"
-                fixedWidth={fixedWidth}
-                forceOpenAll
-                isOpen={isFiltersOpened}
-              />
-            )}
+            <ColumnHeader.Button
+              key="column-options-button-clear-column"
+              analyticsLabel={
+                clearableItems.length ? 'clear_column' : 'unclear_column'
+              }
+              disabled={hasCrossedColumnsLimit || !clearableItems.length}
+              name="check"
+              onPress={() => {
+                dispatch(
+                  actions.setColumnClearedAtFilter({
+                    columnId,
+                    clearedAt: clearableItems.length
+                      ? new Date().toISOString()
+                      : null,
+                  }),
+                )
 
-            <View style={sharedStyles.flex}>
-              <ViewMeasurer
-                key="column-renderer-view-measurer"
-                initialResult={{
-                  width: estimatedInitialCardWidth,
-                  cardViewMode: getCardViewMode(estimatedInitialCardWidth),
-                  enableCompactLabels: getEnableCompactLabels(
-                    estimatedInitialCardWidth,
-                    repoTableColumnWidth,
-                  ),
-                }}
-                mapper={({ width }) => ({
-                  width,
-                  cardViewMode: getCardViewMode(width),
-                  enableCompactLabels: getEnableCompactLabels(
-                    width,
-                    repoTableColumnWidth,
-                  ),
-                })}
-                style={sharedStyles.flex}
-              >
-                {({
-                  cardViewMode,
-                  enableCompactLabels,
-                }: {
-                  cardViewMode: CardViewMode
-                  enableCompactLabels: boolean
-                }) => children({ cardViewMode, enableCompactLabels })}
-              </ViewMeasurer>
+                focusColumn()
 
-              {!!isFreeTrial && <FreeTrialHeaderMessage />}
-            </View>
+                if (!clearableItems.length) refresh()
+              }}
+              tooltip="Clear items"
+            />
+
+            <ColumnHeader.Button
+              key="column-options-button-toggle-mark-as-read"
+              analyticsLabel={
+                !hasOneUnreadItem ? 'mark_as_unread' : 'mark_as_read'
+              }
+              disabled={hasCrossedColumnsLimit || !filteredItems.length}
+              name={!hasOneUnreadItem ? 'mail' : 'mail-read'}
+              onPress={() => {
+                const unread = !hasOneUnreadItem
+
+                const visibleItemNodeIdOrIds = (filteredItems as any[])
+                  .map((item: EnhancedItem) => getItemNodeIdOrId(item))
+                  .filter(Boolean) as string[]
+
+                const column = selectors.columnSelector(
+                  store.getState(),
+                  columnId,
+                )
+
+                const hasAnyFilter = columnHasAnyFilter(columnType, {
+                  ...(column && column.filters),
+                  clearedAt: undefined,
+                })
+
+                // column doesnt have any filter,
+                // so lets mark ALL notifications on github as read at once,
+                // instead of marking only the visible items one by one
+                if (
+                  columnType === 'notifications' &&
+                  !hasAnyFilter &&
+                  !unread
+                ) {
+                  if (repoIsKnown) {
+                    if (owner && repo) {
+                      dispatch(
+                        actions.markRepoNotificationsAsReadOrUnread({
+                          owner,
+                          repo,
+                          unread,
+                        }),
+                      )
+
+                      return
+                    }
+                  } else {
+                    dispatch(
+                      actions.markAllNotificationsAsReadOrUnread({ unread }),
+                    )
+                    return
+                  }
+                }
+
+                // mark only the visible items as read/unread one by one
+                dispatch(
+                  actions.markItemsAsReadOrUnread({
+                    type: columnType,
+                    itemNodeIdOrIds: visibleItemNodeIdOrIds,
+                    unread,
+                  }),
+                )
+
+                focusColumn()
+              }}
+              tooltip={
+                !hasOneUnreadItem ? 'Mark all as unread' : 'Mark all as read'
+              }
+            />
+
+            <ColumnHeader.Button
+              key="column-options-toggle-button"
+              analyticsAction="toggle"
+              analyticsLabel="column_options"
+              name="gear"
+              onPress={toggleOptions}
+              tooltip="Options"
+            />
           </>
-        )}
-      </ViewMeasurer>
+        }
+      />
+
+      <View
+        style={[
+          sharedStyles.flex,
+          sharedStyles.fullWidth,
+          sharedStyles.fullHeight,
+        ]}
+      >
+        <AutoSizer
+          defaultWidth={columnWidth}
+          defaultHeight={Dimensions.get('window').height}
+          style={[
+            sharedStyles.relative,
+            sharedStyles.flex,
+            sharedStyles.fullWidth,
+            sharedStyles.fullHeight,
+          ]}
+        >
+          {({ width, height }) => (
+            <View style={StyleSheet.absoluteFill}>
+              <ColumnOptionsAccordion
+                ref={columnOptionsRef}
+                columnId={columnId}
+              />
+
+              <View style={{ width, height }}>{children}</View>
+            </View>
+          )}
+        </AutoSizer>
+      </View>
+
+      <ColumnFiltersRenderer
+        key="column-options-renderer"
+        columnId={columnId}
+        fixedPosition="right"
+        header="header"
+        type="local"
+      />
+
+      {!!showBannerForPaidFeature && (
+        <FreeTrialHeaderMessage {...showBannerForPaidFeature} />
+      )}
     </Column>
   )
 })
+
+ColumnRenderer.displayName = 'ColumnRenderer'

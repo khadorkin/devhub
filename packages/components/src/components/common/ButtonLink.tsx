@@ -1,14 +1,14 @@
 import React from 'react'
 
-import { Omit } from '@devhub/core'
 import { Browser } from '../../libs/browser'
 import { Linking } from '../../libs/linking'
 import { Platform } from '../../libs/platform'
 import { Button, ButtonProps } from './Button'
 import { Link, LinkProps } from './Link'
 
-export interface ButtonLinkProps extends Omit<ButtonProps, 'onPress'> {
+export type ButtonLinkProps = ButtonProps & {
   href?: LinkProps['href']
+  onPress?: never
   openOnNewTab?: LinkProps['openOnNewTab']
 }
 
@@ -22,11 +22,7 @@ export const ButtonLink = React.memo((props: ButtonLinkProps) => {
         href={href}
         openOnNewTab={openOnNewTab}
       >
-        <Button
-          {...otherProps}
-          analyticsLabel={undefined}
-          onPress={undefined}
-        />
+        <Button {...otherProps} onPress={undefined} />
       </Link>
     )
   }
@@ -44,3 +40,5 @@ export const ButtonLink = React.memo((props: ButtonLinkProps) => {
     />
   )
 })
+
+ButtonLink.displayName = 'ButtonLink'

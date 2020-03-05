@@ -1,8 +1,8 @@
+import { constants, isPlanStatusValid } from '@devhub/core'
 import React from 'react'
 import { View } from 'react-native'
+import { useDispatch } from 'react-redux'
 
-import { constants } from '@devhub/core'
-import { useReduxAction } from '../../hooks/use-redux-action'
 import { useReduxState } from '../../hooks/use-redux-state'
 import { Platform } from '../../libs/platform'
 import * as actions from '../../redux/actions'
@@ -14,13 +14,16 @@ import { ModalColumn } from '../columns/ModalColumn'
 import { AppVersion } from '../common/AppVersion'
 import { Avatar } from '../common/Avatar'
 import { Button } from '../common/Button'
-import { FullHeightScrollView } from '../common/FullHeightScrollView'
+import { ButtonLink } from '../common/ButtonLink'
 import { Link } from '../common/Link'
 import { Spacer } from '../common/Spacer'
 import { SubHeader } from '../common/SubHeader'
+import { UnreadDot } from '../common/UnreadDot'
 import { useAppLayout } from '../context/LayoutContext'
+import { usePlans } from '../context/PlansContext'
 import { ThemedIcon } from '../themed/ThemedIcon'
-import { AppViewModePreference } from '../widgets/AppViewModePreference'
+import { ThemedText } from '../themed/ThemedText'
+import { DesktopPreferences } from '../widgets/DesktopPreferences'
 import { ThemePreference } from '../widgets/ThemePreference'
 
 export interface SettingsModalProps {
@@ -31,17 +34,20 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
   const { showBackButton } = props
 
   const { sizename } = useAppLayout()
+  const { freePlan } = usePlans()
+
+  const dispatch = useDispatch()
+  const appToken = useReduxState(selectors.appTokenSelector)
   const username = useReduxState(selectors.currentGitHubUsernameSelector)
-  const logout = useReduxAction(actions.logout)
-  const pushModal = useReduxAction(actions.pushModal)
+  const userPlan = useReduxState(selectors.currentUserPlanSelector)
+  const isPlanExpired = useReduxState(selectors.isPlanExpiredSelector)
 
   return (
     <ModalColumn
-      hideCloseButton={sizename === '1-small'}
-      iconName="gear"
+      hideCloseButton={sizename <= '2-medium'}
       name="SETTINGS"
       right={
-        sizename === '1-small' && username ? (
+        sizename <= '2-medium' && username ? (
           <Avatar
             backgroundColorLoading=""
             shape="circle"
@@ -55,14 +61,63 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
       showBackButton={showBackButton}
       title="Preferences"
     >
-      <FullHeightScrollView
-        alwaysBounceVertical
-        bounces
-        style={sharedStyles.flex}
-      >
-        <AppViewModePreference>
-          <Spacer height={contentPadding} />
-        </AppViewModePreference>
+      <>
+        {Platform.OS === 'web' &&
+          !(userPlan && userPlan.status === 'active' && !userPlan.interval) && (
+            <View>
+              <SubHeader title="Current plan">
+                <Spacer flex={1} />
+
+                <ButtonLink
+                  href={`${constants.DEVHUB_LINKS.ACCOUNT_PAGE}?appToken=${appToken}`}
+                  openOnNewTab
+                  size={32}
+                >
+                  <View style={[sharedStyles.center, sharedStyles.horizontal]}>
+                    {/* <ThemedIcon color="foregroundColor" name="pencil" />
+                  <Spacer width={contentPadding / 2} /> */}
+                    <ThemedText color="foregroundColor">{`${
+                      userPlan
+                        ? userPlan.label || (userPlan.amount ? 'Paid' : 'Free')
+                        : 'None'
+                    }${
+                      isPlanExpired
+                        ? ' (expired)'
+                        : userPlan && userPlan.status === 'trialing'
+                        ? (userPlan.label || '').toLowerCase().includes('trial')
+                          ? ''
+                          : userPlan.amount
+                          ? ' (trial)'
+                          : ' trial'
+                        : !isPlanStatusValid(userPlan) &&
+                          userPlan &&
+                          userPlan.status
+                        ? ` (${userPlan.status})`
+                        : ''
+                    } ↗`}</ThemedText>
+                    {!!(
+                      (isPlanExpired &&
+                        !(freePlan && !freePlan.trialPeriodDays)) ||
+                      (userPlan &&
+                        userPlan.status === 'active' &&
+                        userPlan.cancelAtPeriodEnd &&
+                        userPlan.cancelAt) ||
+                      (userPlan &&
+                        userPlan.status &&
+                        !isPlanStatusValid(userPlan))
+                    ) && (
+                      <>
+                        <Spacer width={contentPadding / 2} />
+                        <UnreadDot backgroundColor="red" borderColor={null} />
+                      </>
+                    )}
+                  </View>
+                </ButtonLink>
+              </SubHeader>
+            </View>
+          )}
+
+        <DesktopPreferences />
 
         <ThemePreference />
 
@@ -76,7 +131,6 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
             analyticsCategory="enterprise"
             analyticsAction="setup"
             analyticsLabel={username}
-            analyticsPayload={{ user_id: userId }}
             onPress={() => pushModal({ name: 'SETUP_GITHUB_ENTERPRISE' })}
           >
             Setup GitHub Enterprise
@@ -85,105 +139,139 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
 
         <Spacer height={contentPadding} />
 
-        {(Platform.realOS === 'ios' || Platform.realOS === 'android') && (
-          <>
-            <SubHeader title="Rate this app">
-              <Spacer flex={1} />
-
-              <Button
-                analyticsLabel="rate_app"
-                onPress={() => openAppStore()}
-                size={32}
-              >
-                <ThemedIcon color="foregroundColor" name="star" size={16} />
-              </Button>
-            </SubHeader>
-          </>
-        )}
-
-        <View>
-          <SubHeader title="Follow on Twitter">
+        {Platform.OS === 'ios' || Platform.OS === 'android' ? (
+          <SubHeader title="Rate this app">
             <Spacer flex={1} />
 
-            <Link
-              analyticsCategory="preferences_link"
-              analyticsLabel="follow_on_twitter_brunolemos"
-              href="https://twitter.com/brunolemos"
-              openOnNewTab
+            <Button
+              analyticsLabel="rate_app"
+              onPress={() => openAppStore({ showReviewModal: true })}
+              size={32}
             >
-              <Avatar
-                disableLink
-                username="brunolemos"
-                size={24}
-                tooltip="@brunolemos on Twitter"
-              />
-            </Link>
-
-            <Spacer width={contentPadding} />
-
-            <Link
-              analyticsCategory="preferences_link"
-              analyticsLabel="follow_on_twitter_devhub"
-              href="https://twitter.com/devhub_app"
-              openOnNewTab
-            >
-              <Avatar
-                disableLink
-                username="devhubapp"
-                size={24}
-                tooltip="@devhub_app on Twitter"
-              />
-            </Link>
+              <ThemedIcon color="foregroundColor" name="star" size={16} />
+            </Button>
           </SubHeader>
-        </View>
-
-        <View>
-          <SubHeader title="Join Slack Community">
+        ) : Platform.realOS === 'ios' || Platform.realOS === 'android' ? (
+          <SubHeader title="Download native app">
             <Spacer flex={1} />
 
-            <Link
-              analyticsCategory="preferences_link"
-              analyticsLabel="join_slack_community"
-              href={constants.SLACK_INVITE_LINK}
-              openOnNewTab
+            <Button
+              analyticsLabel="download_native_app"
+              onPress={() => openAppStore({ showReviewModal: false })}
+              size={32}
             >
-              <Avatar
-                avatarUrl="https://user-images.githubusercontent.com/619186/57062615-133ae880-6c97-11e9-915d-ae40de664b12.png"
-                disableLink
-                size={24}
+              <ThemedIcon
+                color="foregroundColor"
+                name="device-mobile"
+                size={16}
               />
-            </Link>
+            </Button>
+          </SubHeader>
+        ) : null}
+
+        <View style={{ minHeight: 32 }}>
+          <SubHeader title="Community">
+            <Spacer flex={1} />
+
+            <View style={sharedStyles.horizontal}>
+              <Link
+                analyticsCategory="preferences_link"
+                analyticsLabel="twitter"
+                enableForegroundHover
+                href={constants.DEVHUB_LINKS.TWITTER_PROFILE}
+                openOnNewTab
+                textProps={{
+                  color: 'foregroundColor',
+                  style: {
+                    fontSize: 14,
+                    lineHeight: 18,
+                    textAlign: 'center',
+                  },
+                }}
+              >
+                Twitter
+              </Link>
+
+              <ThemedText
+                color="foregroundColorMuted25"
+                style={{
+                  fontStyle: 'italic',
+                  paddingHorizontal: contentPadding / 2,
+                }}
+              >
+                |
+              </ThemedText>
+
+              <Link
+                analyticsCategory="preferences_link"
+                analyticsLabel="slack"
+                enableForegroundHover
+                href={constants.DEVHUB_LINKS.SLACK_INVITATION}
+                openOnNewTab
+                textProps={{
+                  color: 'foregroundColor',
+                  style: {
+                    fontSize: 14,
+                    lineHeight: 18,
+                    textAlign: 'center',
+                  },
+                }}
+              >
+                Slack
+              </Link>
+
+              <ThemedText
+                color="foregroundColorMuted25"
+                style={{
+                  fontStyle: 'italic',
+                  paddingHorizontal: contentPadding / 2,
+                }}
+              >
+                |
+              </ThemedText>
+
+              <Link
+                analyticsCategory="preferences_link"
+                analyticsLabel="github"
+                enableForegroundHover
+                href={constants.DEVHUB_LINKS.GITHUB_REPOSITORY}
+                openOnNewTab
+                textProps={{
+                  color: 'foregroundColor',
+                  style: {
+                    fontSize: 14,
+                    lineHeight: 18,
+                    textAlign: 'center',
+                  },
+                }}
+              >
+                GitHub
+              </Link>
+            </View>
           </SubHeader>
         </View>
 
         <Spacer flex={1} minHeight={contentPadding} />
 
-        <View style={{ padding: contentPadding }}>
+        <View style={sharedStyles.paddingHorizontal}>
           <AppVersion />
 
           <Spacer height={contentPadding / 2} />
 
           <Button
-            key="adbanced-button"
-            analyticsLabel=""
-            onPress={() => pushModal({ name: 'ADVANCED_SETTINGS' })}
+            key="advanced-button"
+            onPress={() =>
+              dispatch(actions.pushModal({ name: 'ADVANCED_SETTINGS' }))
+            }
           >
             Show advanced settings
           </Button>
-
-          <Spacer height={contentPadding / 2} />
-
-          <Button
-            key="logout-button"
-            analyticsCategory="engagement"
-            analyticsAction="logout"
-            analyticsLabel=""
-            onPress={() => logout()}
-          >
-            Logout
-          </Button>
         </View>
-      </FullHeightScrollView>
+
+        <Spacer height={contentPadding / 2} />
+      </>
     </ModalColumn>
   )
 })
+
+SettingsModal.displayName = 'SettingsModal'

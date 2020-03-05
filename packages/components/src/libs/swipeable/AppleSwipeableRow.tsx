@@ -14,7 +14,6 @@ import {
 export { defaultWidth } from './BaseSwipeableRow'
 
 export interface AppleSwipeableRowAction extends BaseSwipeableRowAction {
-  icon: undefined
   label: string
 }
 
@@ -26,24 +25,26 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
   void,
   AppleSwipeableRowAction
 > {
-  _swipeableRow = null
-
   renderButtonAction = (
     action: AppleSwipeableRowAction,
     {
       x,
       placement,
-      progress,
-    }: { x: number; placement: Placement; progress: Animated.Value },
+      progressAnimatedValue,
+    }: {
+      placement: Placement
+      progressAnimatedValue: Animated.Value | Animated.AnimatedInterpolation
+      x: number
+    },
   ) => {
     const transform = {
       translateX:
         placement === 'LEFT'
-          ? progress.interpolate({
+          ? progressAnimatedValue.interpolate({
               inputRange: [0, 1],
               outputRange: [-x, 0],
             })
-          : progress.interpolate({
+          : progressAnimatedValue.interpolate({
               inputRange: [0, 1],
               outputRange: [x, 0],
             }),
@@ -63,13 +64,16 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
           onPress={pressHandler}
           style={[
             styles.baseActionContainer,
-            { backgroundColor: action.color, width: action.width },
+            { backgroundColor: action.backgroundColor, width: action.width },
           ]}
         >
           <Text
             style={[
               styles.actionText,
-              { alignSelf: 'center', color: action.textColor || '#FFFFFF' },
+              {
+                alignSelf: 'center',
+                color: action.foregroundColor || '#FF0000',
+              },
             ]}
           >
             {action.label}
@@ -81,16 +85,22 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
 
   renderFullAction = (
     action: AppleSwipeableRowAction,
-    { dragX, placement }: { dragX: Animated.Value; placement: Placement },
+    {
+      dragAnimatedValue,
+      placement,
+    }: {
+      dragAnimatedValue: Animated.AnimatedInterpolation
+      placement: Placement
+    },
   ) => {
     const transform = {
       translateX:
         placement === 'LEFT'
-          ? dragX.interpolate({
+          ? dragAnimatedValue.interpolate({
               inputRange: [0, 50, 100, 101],
               outputRange: [-20, 0, 0, 1],
             })
-          : dragX.interpolate({
+          : dragAnimatedValue.interpolate({
               inputRange: [-101, -100, -50, 0],
               outputRange: [-1, 0, 0, 20],
             }),
@@ -106,7 +116,7 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
         key={`swipeable-full-action-${action.key}`}
         style={[
           styles.baseActionContainer,
-          { backgroundColor: action.color, minWidth: action.width },
+          { backgroundColor: action.backgroundColor, minWidth: action.width },
         ]}
         onPress={pressHandler}
       >
@@ -115,7 +125,7 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
             styles.actionText,
             {
               alignSelf: placement === 'LEFT' ? 'flex-start' : 'flex-end',
-              color: action.textColor || '#FFFFFF',
+              color: action.foregroundColor || '#FF0000',
               transform: [transform],
             },
           ]}
@@ -132,7 +142,7 @@ export class AppleSwipeableRow extends BaseSwipeableRow<
     return (
       <Swipeable
         {...props}
-        ref={this.updateRef}
+        ref={this.swipeableRef}
         friction={2}
         leftThreshold={30}
         renderLeftActions={this.renderLeftActions}

@@ -1,19 +1,18 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 
-import { getColumnHeaderDetails, Omit } from '@devhub/core'
+import { getColumnHeaderDetails } from '@devhub/core'
 import {
   NotificationCardsContainer,
   NotificationCardsContainerProps,
 } from '../../containers/NotificationCardsContainer'
-import { ColumnRenderer } from './ColumnRenderer'
+import { ColumnRenderer, ColumnRendererProps } from './ColumnRenderer'
 
 export interface NotificationColumnProps
   extends Omit<
     NotificationCardsContainerProps,
-    'cardViewMode' | 'enableCompactLabels' | 'repoIsKnown'
+    'ownerIsKnown' | 'repoIsKnown'
   > {
   columnIndex: number
-  disableColumnOptions?: boolean
   headerDetails: ReturnType<typeof getColumnHeaderDetails>
   pagingEnabled?: boolean
 }
@@ -21,24 +20,40 @@ export interface NotificationColumnProps
 export const NotificationColumn = React.memo(
   (props: NotificationColumnProps) => {
     const {
-      column,
+      columnId,
       columnIndex,
-      disableColumnOptions,
       headerDetails,
       pagingEnabled,
+      pointerEvents,
+      swipeable,
     } = props
+
+    const Children = useMemo<ColumnRendererProps['children']>(
+      () => (
+        <NotificationCardsContainer
+          key={`notification-cards-container-${columnId}`}
+          columnId={columnId}
+          pointerEvents={pointerEvents}
+          swipeable={swipeable}
+        />
+      ),
+      [columnId, columnIndex, pointerEvents, swipeable],
+    )
 
     if (!headerDetails) return null
 
     return (
       <ColumnRenderer
-        key={`notification-column-${column.id}-inner`}
-        avatarRepo={headerDetails.avatarProps && headerDetails.avatarProps.repo}
-        avatarUsername={
-          headerDetails.avatarProps && headerDetails.avatarProps.username
+        key={`notification-column-${columnId}-inner`}
+        avatarImageURL={
+          headerDetails.avatarProps && headerDetails.avatarProps.imageURL
         }
-        column={column}
-        disableColumnOptions={disableColumnOptions}
+        avatarLinkURL={
+          headerDetails.avatarProps && headerDetails.avatarProps.linkURL
+        }
+        columnId={columnId}
+        columnIndex={columnIndex}
+        columnType="notifications"
         icon={headerDetails.icon}
         owner={headerDetails.owner}
         pagingEnabled={pagingEnabled}
@@ -47,17 +62,10 @@ export const NotificationColumn = React.memo(
         subtitle={headerDetails.subtitle}
         title={headerDetails.title}
       >
-        {({ cardViewMode, enableCompactLabels }) => (
-          <NotificationCardsContainer
-            {...props}
-            key={`notification-cards-container-${column.id}`}
-            cardViewMode={cardViewMode}
-            columnIndex={columnIndex}
-            enableCompactLabels={enableCompactLabels}
-            repoIsKnown={headerDetails.repoIsKnown}
-          />
-        )}
+        {Children}
       </ColumnRenderer>
     )
   },
 )
+
+NotificationColumn.displayName = 'NotificationColumn'

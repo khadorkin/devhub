@@ -1,12 +1,13 @@
 import {
   ColumnAndSubscriptions,
   ColumnFilters,
+  ColumnOptions,
   ColumnsAndSubscriptions,
   ColumnSubscriptionCreation,
+  EnhancedGitHubNotification,
   GitHubEventAction,
   GitHubEventSubjectType,
   GitHubIssueOrPullRequestSubjectType,
-  GitHubNotificationReason,
   GitHubNotificationSubjectType,
   GitHubStateType,
   NotificationColumnFilters,
@@ -49,9 +50,28 @@ export function moveColumn(
   payload: {
     columnId: string
     columnIndex: number
-  } & EmitterTypes['FOCUS_ON_COLUMN'],
+  } & Omit<EmitterTypes['FOCUS_ON_COLUMN'], 'focusOnVisibleItem'>,
 ) {
   return createAction('MOVE_COLUMN', payload)
+}
+
+export function setColumnOption<O extends keyof ColumnOptions>(payload: {
+  columnId: string
+  option: O
+  value: ColumnOptions[O] | null
+}) {
+  return createAction('SET_COLUMN_OPTION', payload)
+}
+
+export function clearColumnFilters(payload: { columnId: string }) {
+  return createAction('CLEAR_COLUMN_FILTERS', payload)
+}
+
+export function replaceColumnFilters(payload: {
+  columnId: string
+  filters: ColumnFilters
+}) {
+  return createAction('REPLACE_COLUMN_FILTERS', payload)
 }
 
 export function setColumnSavedFilter(payload: {
@@ -74,9 +94,25 @@ export function setColumnActivityActionFilter<
   return createAction('SET_COLUMN_ACTIVITY_ACTION_FILTER', payload)
 }
 
+export function setColumnLabelFilter(payload: {
+  columnId: string
+  label: string
+  value: boolean | null
+  removeIfAlreadySet?: boolean
+  removeOthers?: boolean
+}) {
+  return createAction('SET_COLUMN_LABEL_FILTER', payload)
+}
+
 export function setColumnReasonFilter<
-  T extends GitHubNotificationReason
->(payload: { columnId: string; reason: T; value: boolean | null }) {
+  T extends EnhancedGitHubNotification['reason']
+>(payload: {
+  columnId: string
+  reason: T
+  value: boolean | null
+  removeIfAlreadySet?: boolean
+  removeOthers?: boolean
+}) {
   return createAction('SET_COLUMN_REASON_FILTER', payload)
 }
 
@@ -87,6 +123,13 @@ export function setColummStateTypeFilter<T extends GitHubStateType>(payload: {
   supportsOnlyOne?: boolean
 }) {
   return createAction('SET_COLUMN_STATE_FILTER', payload)
+}
+
+export function setColummBotFilter(payload: {
+  columnId: string
+  bot: ColumnFilters['bot']
+}) {
+  return createAction('SET_COLUMN_BOT_FILTER', payload)
 }
 
 export function setColummDraftFilter(payload: {
@@ -112,6 +155,53 @@ export function setColumnUnreadFilter(payload: {
   return createAction('SET_COLUMN_UNREAD_FILTER', payload)
 }
 
+export function setColumnInvolvesFilter(payload: {
+  columnId: string
+  user: string
+  value: boolean | null
+}) {
+  return createAction('SET_COLUMN_INVOLVES_FILTER', payload)
+}
+
+export function replaceColumnWatchingFilter(payload: {
+  columnId: string
+  owner: string | null
+}) {
+  return createAction('REPLACE_COLUMN_WATCHING_FILTER', payload)
+}
+
+export function setColumnWatchingFilter(payload: {
+  columnId: string
+  owner: string
+  value: boolean | null
+}) {
+  return createAction('SET_COLUMN_WATCHING_FILTER', payload)
+}
+
+export function replaceColumnOwnerFilter(payload: {
+  columnId: string
+  owner: string | null
+}) {
+  return createAction('REPLACE_COLUMN_OWNER_FILTER', payload)
+}
+
+export function setColumnOwnerFilter(payload: {
+  columnId: string
+  owner: string
+  value: boolean | null
+}) {
+  return createAction('SET_COLUMN_OWNER_FILTER', payload)
+}
+
+export function setColumnRepoFilter(payload: {
+  columnId: string
+  owner: string
+  repo: string
+  value: boolean | null
+}) {
+  return createAction('SET_COLUMN_REPO_FILTER', payload)
+}
+
 export function setColumnPrivacyFilter(payload: {
   columnId: string
   private: ColumnFilters['private']
@@ -124,4 +214,14 @@ export function setColumnClearedAtFilter(payload: {
   clearedAt: string | null
 }) {
   return createAction('SET_COLUMN_CLEARED_AT_FILTER', payload)
+}
+
+export function changeIssueNumberFilter(payload: {
+  columnId: string
+  issueNumber: number
+  value: boolean | null
+  removeIfAlreadySet?: boolean
+  removeOthers?: boolean
+}) {
+  return createAction('CHANGE_ISSUE_NUMBER_FILTER', payload)
 }

@@ -5,24 +5,15 @@ import { IssueOrPullRequestColumn } from '../components/columns/IssueOrPullReque
 import { NotificationColumn } from '../components/columns/NotificationColumn'
 import { useColumn } from '../hooks/use-column'
 import { bugsnag } from '../libs/bugsnag'
-import { FlatListProps } from '../libs/flatlist'
 
 export interface ColumnContainerProps {
   columnId: string
-  disableColumnOptions?: boolean
   pagingEnabled?: boolean
   swipeable: boolean
-  pointerEvents: FlatListProps<any>['pointerEvents']
 }
 
 export const ColumnContainer = React.memo((props: ColumnContainerProps) => {
-  const {
-    columnId,
-    disableColumnOptions,
-    pagingEnabled,
-    pointerEvents,
-    swipeable,
-  } = props
+  const { columnId, pagingEnabled, swipeable } = props
 
   const { column, columnIndex, headerDetails } = useColumn(columnId)
 
@@ -33,12 +24,10 @@ export const ColumnContainer = React.memo((props: ColumnContainerProps) => {
       return (
         <EventColumn
           key={`event-column-${column.id}`}
-          column={column}
+          columnId={column.id}
           columnIndex={columnIndex}
-          disableColumnOptions={disableColumnOptions}
           headerDetails={headerDetails}
           pagingEnabled={pagingEnabled}
-          pointerEvents={pointerEvents}
           swipeable={swipeable}
         />
       )
@@ -48,12 +37,10 @@ export const ColumnContainer = React.memo((props: ColumnContainerProps) => {
       return (
         <IssueOrPullRequestColumn
           key={`issue-or-pr-column-${column.id}`}
-          column={column}
+          columnId={column.id}
           columnIndex={columnIndex}
-          disableColumnOptions={disableColumnOptions}
           headerDetails={headerDetails}
           pagingEnabled={pagingEnabled}
-          pointerEvents={pointerEvents}
           swipeable={swipeable}
         />
       )
@@ -63,12 +50,10 @@ export const ColumnContainer = React.memo((props: ColumnContainerProps) => {
       return (
         <NotificationColumn
           key={`notification-column-${column.id}`}
-          column={column}
+          columnId={column.id}
           columnIndex={columnIndex}
-          disableColumnOptions={disableColumnOptions}
           headerDetails={headerDetails}
           pagingEnabled={pagingEnabled}
-          pointerEvents={pointerEvents}
           swipeable={swipeable}
         />
       )
@@ -82,3 +67,5 @@ export const ColumnContainer = React.memo((props: ColumnContainerProps) => {
     }
   }
 })
+
+ColumnContainer.displayName = 'ColumnContainer'

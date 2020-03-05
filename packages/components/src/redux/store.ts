@@ -1,34 +1,66 @@
-import { applyMiddleware, createStore } from 'redux'
+import { applyMiddleware, compose, createStore } from 'redux'
 import { composeWithDevTools } from 'redux-devtools-extension'
 import {
   createMigrate,
+  getStoredState,
   PersistConfig,
   persistReducer,
   persistStore,
+  purgeStoredState,
 } from 'redux-persist'
-import storage from 'redux-persist/lib/storage'
 import createSagaMiddleware from 'redux-saga'
 import { registerSelectors } from 'reselect-tools'
 
+import { Platform } from '../libs/platform'
 import { analyticsMiddleware } from './middlewares/analytics'
-import { bugsnagMiddleware } from './middlewares/bugsnag'
+import { electronMiddleware } from './middlewares/electron'
 import migrations from './migrations'
 import { rootReducer } from './reducers'
 import { rootSaga } from './sagas'
 import * as selectors from './selectors'
+import storage from './storage'
 
 if (__DEV__) {
   registerSelectors(selectors)
 }
 
+const composeFn: typeof composeWithDevTools = __DEV__
+  ? composeWithDevTools
+  : compose
+
 export function configureStore(key = 'root') {
-  const persistConfig: PersistConfig = {
+  const persistConfig: PersistConfig<any> = {
     blacklist: ['navigation'],
     key,
-    migrate: createMigrate(migrations as any, { debug: __DEV__ }),
+    migrate: async (state, currentVersion) => {
+      if (!state && Platform.OS === 'web') {
+        try {
+          const previousConfig: PersistConfig<any> = {
+            key,
+            storage: require('react-native').AsyncStorage,
+          }
+
+          const previousState = await getStoredState(previousConfig)
+          if (previousState) {
+            const newState = createMigrate(migrations as any, {
+              debug: __DEV__,
+            })(previousState as any, currentVersion)
+            purgeStoredState(previousConfig)
+            return newState
+          }
+        } catch (error) {
+          console.error(error)
+        }
+      }
+
+      return createMigrate(migrations as any, { debug: __DEV__ })(
+        state,
+        currentVersion,
+      )
+    },
     storage,
     throttle: 500,
-    version: 11,
+    version: 17,
   }
   const persistedReducer = persistReducer(persistConfig, rootReducer)
 
@@ -50,14 +82,14 @@ export function configureStore(key = 'root') {
 
   const store = createStore(
     persistedReducer,
-    composeWithDevTools(
-      applyMiddleware(bugsnagMiddleware, analyticsMiddleware, sagaMiddleware),
+    composeFn(
+      applyMiddleware(analyticsMiddleware, sagaMiddleware, electronMiddleware),
     ),
   )
 
   const persistor = persistStore(store)
 
-  sagaMiddleware.run(rootSaga)
+  sagaMiddleware.run(rootSaga as any)
 
   return { store, persistor }
 }

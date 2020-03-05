@@ -1,7 +1,7 @@
-import { Omit } from '@devhub/core'
 import _ from 'lodash'
 import React, { Fragment } from 'react'
 import { Image, ImageProps } from 'react-native'
+
 import { genericParseText } from '../shared'
 
 const emojis = {
@@ -1170,7 +1170,7 @@ const emojis = {
   seven: 'unicode/0037-20e3',
   seychelles: 'unicode/1f1f8-1f1e8',
   shallow_pan_of_food: 'unicode/1f958',
-  shamrock: 'unicode/2618',
+  shamrock: 'unicode/2630',
   shark: 'unicode/1f988',
   shaved_ice: 'unicode/1f367',
   sheep: 'unicode/1f411',
@@ -1543,13 +1543,15 @@ export interface EmojiParseOptions {
   alt?: string
   before?: React.ReactNode
   imageProps?: Omit<ImageProps, 'source'>
-  key: string
+  key?: string
+  shouldStripEmojis?: boolean
 }
 
 function getComponent(
   emojiImageURL: string | undefined,
-  { alt, before, after, imageProps }: EmojiParseOptions,
+  { alt, before, after, imageProps, shouldStripEmojis }: EmojiParseOptions,
 ): React.ReactNode {
+  if (shouldStripEmojis) return null
   if (!emojiImageURL) return null
 
   return (
@@ -1611,7 +1613,18 @@ export function parseTextWithEmojisToReactComponents(
       if (typeof item !== 'string') return item
       return parseTextWithEmojisToReactComponents_2(item, options)
     }),
-  ).map((item, index) => (
-    <Fragment key={`${options.key}-${index}`}>{item}</Fragment>
-  ))
+  ).map(
+    (options.key &&
+      ((item, index) => (
+        <Fragment key={`${options.key}-${index}`}>{item}</Fragment>
+      ))) ||
+      (item => item),
+  )
+}
+
+export function stripEmojis(text: string): string {
+  return parseTextWithEmojisToReactComponents(text, { shouldStripEmojis: true })
+    .join(' ')
+    .replace(/\s\s/g, ' ')
+    .trim()
 }

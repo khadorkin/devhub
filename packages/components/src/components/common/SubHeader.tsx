@@ -1,19 +1,18 @@
 import React from 'react'
 
 import { View } from 'react-native'
+import { OcticonIconProps } from '../../libs/vector-icons'
+import { sharedStyles } from '../../styles/shared'
 import { contentPadding } from '../../styles/variables'
-import {
-  ColumnHeaderItem,
-  ColumnHeaderItemProps,
-} from '../columns/ColumnHeaderItem'
+import { ThemedIcon } from '../themed/ThemedIcon'
 import { H2 } from './H2'
 import { Spacer } from './Spacer'
 
 export interface SubHeaderProps {
   children?: React.ReactNode
-  iconName?: ColumnHeaderItemProps['iconName']
+  iconName?: OcticonIconProps['name']
   muted?: boolean
-  title?: ColumnHeaderItemProps['title']
+  title?: string
 }
 
 export function SubHeader(props: SubHeaderProps) {
@@ -21,32 +20,31 @@ export function SubHeader(props: SubHeaderProps) {
 
   return (
     <View
-      style={{
-        flexDirection: 'row',
-        justifyContent: 'flex-start',
-        alignSelf: 'stretch',
-        alignItems: 'center',
-        padding: contentPadding,
-      }}
+      style={[
+        sharedStyles.horizontal,
+        sharedStyles.justifyContentFlexStart,
+        sharedStyles.alignSelfStretch,
+        sharedStyles.alignItemsCenter,
+        sharedStyles.padding,
+      ]}
     >
       {!!iconName && (
-        <ColumnHeaderItem
-          analyticsLabel={undefined}
-          fixedIconSize
-          iconName={iconName}
-          noPadding
+        <ThemedIcon
+          color="foregroundColor"
+          family="octicon"
+          name={iconName}
           size={18}
-          titleStyle={{ fontWeight: '400' }}
-          tooltip={undefined}
         />
       )}
 
-      {!!iconName && !!title && <Spacer width={contentPadding / 2} />}
-
       {!!title && (
-        <H2 muted={muted} withMargin={false}>
-          {title}
-        </H2>
+        <>
+          {!!iconName && <Spacer width={contentPadding / 2} />}
+
+          <H2 muted={muted} withMargin={false}>
+            {title}
+          </H2>
+        </>
       )}
 
       {children}

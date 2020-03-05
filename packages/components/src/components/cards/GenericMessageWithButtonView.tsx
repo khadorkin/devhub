@@ -1,66 +1,104 @@
 import React from 'react'
-import { Image, Text, View, ViewProps } from 'react-native'
+import { Image, View, ViewProps } from 'react-native'
 
-import { contentPadding } from '../../styles/variables'
+import { sharedStyles } from '../../styles/shared'
+import {
+  contentPadding,
+  normalTextSize,
+  smallTextSize,
+} from '../../styles/variables'
 import {
   getEmojiImageURL,
   GitHubEmoji,
 } from '../../utils/helpers/github/emojis'
+import { Spacer } from '../common/Spacer'
 import { ThemedText } from '../themed/ThemedText'
 
 export interface GenericMessageWithButtonViewProps {
   buttonView: React.ReactNode
   emoji: GitHubEmoji | null
+  fullCenter?: boolean
+  style?: ViewProps['style']
   subtitle: string | undefined | null
   title: string | undefined | null
-  style?: ViewProps['style']
 }
 
 export const GenericMessageWithButtonView = React.memo(
   (props: GenericMessageWithButtonViewProps) => {
-    const { buttonView, emoji, style, subtitle, title } = props
+    const { buttonView, emoji, fullCenter, style, subtitle, title } = props
 
     const emojiImageURL = emoji ? getEmojiImageURL(emoji) : null
 
     return (
       <View
         style={[
+          fullCenter && {
+            flex: 1,
+            alignContent: 'center',
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
           {
             width: '100%',
             padding: contentPadding,
           },
           style,
         ]}
+        pointerEvents="box-none"
       >
         {!!emojiImageURL && (
-          <Image
-            source={{ uri: emojiImageURL }}
-            style={{
-              alignSelf: 'center',
-              width: 16,
-              height: 16,
-              marginBottom: 4,
-            }}
-          />
+          <>
+            <Image
+              source={{ uri: emojiImageURL }}
+              style={[
+                sharedStyles.alignSelfCenter,
+                {
+                  width: normalTextSize * 2,
+                  height: normalTextSize * 2,
+                  marginBottom: contentPadding / 4,
+                },
+              ]}
+            />
+
+            {!!(title || subtitle) && <Spacer height={contentPadding / 2} />}
+          </>
         )}
 
         <ThemedText
-          color="foregroundColorMuted60"
-          style={{
-            lineHeight: 20,
-            fontSize: 14,
-            textAlign: 'center',
-          }}
+          color="foregroundColorMuted65"
+          style={[
+            sharedStyles.textCenter,
+            {
+              lineHeight: normalTextSize + 4 + 2,
+              fontSize: normalTextSize + 4,
+              fontWeight: '600',
+            },
+          ]}
         >
           {title}
-
-          {!!subtitle && (
-            <>
-              {!!title && <Text>{'\n'}</Text>}
-              <Text style={{ fontSize: 13 }}>{subtitle}</Text>
-            </>
-          )}
         </ThemedText>
+
+        {!!subtitle && (
+          <>
+            {!!title && <Spacer height={contentPadding / 2} />}
+
+            <ThemedText
+              color="foregroundColorMuted65"
+              style={[
+                sharedStyles.textCenter,
+                {
+                  lineHeight: smallTextSize + 3,
+                  fontSize: smallTextSize,
+                  fontWeight: '300',
+                },
+              ]}
+            >
+              {subtitle}
+            </ThemedText>
+          </>
+        )}
+
+        <Spacer height={contentPadding / 2} />
 
         {!!buttonView && (
           <View style={{ padding: contentPadding }}>{buttonView}</View>
@@ -69,3 +107,5 @@ export const GenericMessageWithButtonView = React.memo(
     )
   },
 )
+
+GenericMessageWithButtonView.displayName = 'GenericMessageWithButtonView'

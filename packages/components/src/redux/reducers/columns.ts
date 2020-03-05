@@ -3,11 +3,16 @@ import _ from 'lodash'
 
 import {
   ActivityColumn,
+  ActivityColumnFilters,
   Column,
   filterRecordHasAnyForcedValue,
+  getQueryStringFromQueryTerms,
+  getSearchQueryTerms,
+  IssueOrPullRequestColumnFilters,
   normalizeColumns,
   normalizeSubscriptions,
   NotificationColumn,
+  NotificationColumnFilters,
 } from '@devhub/core'
 import { Reducer } from '../types'
 
@@ -71,6 +76,10 @@ export const columnsReducer: Reducer<State> = (
 
         column.subscriptionIds = _.uniq(
           column.subscriptionIds.concat(action.payload.subscription.id),
+        )
+
+        column.subscriptionIdsHistory = _.uniq(
+          (column.subscriptionIdsHistory || []).concat(column.subscriptionIds),
         )
 
         draft.updatedAt = new Date().toISOString()
@@ -158,11 +167,86 @@ export const columnsReducer: Reducer<State> = (
         draft.updatedAt = normalized.updatedAt
       })
 
+    case 'SET_COLUMN_OPTION': {
+      return immer(state, draft => {
+        if (!draft.byId) return
+
+        const column = draft.byId[action.payload.columnId]
+        if (!column) return
+
+        if (!action.payload.option) return
+
+        column.options = column.options || {}
+        if (typeof action.payload.value === 'boolean') {
+          column.options[action.payload.option] = action.payload.value
+        } else {
+          delete column.options[action.payload.option]
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+    }
+
+    case 'CLEAR_COLUMN_FILTERS':
+      return immer(state, draft => {
+        if (!draft.byId) return
+
+        const column = draft.byId[action.payload.columnId]
+        if (!column) return
+
+        const previousFilters = column.filters || {}
+        column.filters = {}
+
+        // don't reset inbox filter
+        if (column.type === 'notifications') {
+          const _column = column as NotificationColumn
+          const _previousFilters = previousFilters as NotificationColumnFilters
+
+          if (
+            _previousFilters.notifications &&
+            _previousFilters.notifications.participating
+          ) {
+            _column.filters!.notifications =
+              _column.filters!.notifications || {}
+            _column.filters!.notifications.participating =
+              _previousFilters.notifications.participating
+          }
+        }
+
+        // // cannot delete some filters to avoid invalid search query
+        // if (column.type === 'issue_or_pr') {
+        //   const _column = column as IssueOrPullRequestColumn
+        //   const _previousFilters = previousFilters as IssueOrPullRequestColumnFilters
+
+        //   _column.filters!.involves = _previousFilters.involves
+
+        //   if (
+        //     !filterRecordWithThisValueCount(_column.filters!.involves, true)
+        //   ) {
+        //     _column.filters!.owners = _previousFilters.owners
+        //   }
+        // }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'REPLACE_COLUMN_FILTERS':
+      return immer(state, draft => {
+        if (!draft.byId) return
+
+        const column = draft.byId[action.payload.columnId]
+        if (!column) return
+
+        column.filters = action.payload.filters || {}
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
     case 'SET_COLUMN_SAVED_FILTER':
       return immer(state, draft => {
         if (!draft.byId) return
 
-        const column = draft.byId[action.payload.columnId] as NotificationColumn
+        const column = draft.byId[action.payload.columnId]
         if (!column) return
 
         column.filters = column.filters || {}
@@ -217,11 +301,89 @@ export const columnsReducer: Reducer<State> = (
         draft.updatedAt = new Date().toISOString()
       })
 
-    case 'SET_COLUMN_REASON_FILTER':
+    case 'SET_COLUMN_LABEL_FILTER':
       return immer(state, draft => {
+        const {
+          columnId,
+          label: _label,
+          removeIfAlreadySet,
+          removeOthers,
+          value,
+        } = action.payload
+
         if (!draft.byId) return
 
-        const column = draft.byId[action.payload.columnId] as NotificationColumn
+        const column = draft.byId[columnId] as NotificationColumn
+        if (!column) return
+
+        if (!(_label && typeof _label === 'string' && _label.trim())) return
+        const label =
+          _label.includes(' ') && _label[0] !== '"' ? `"${_label}"` : _label
+
+        column.filters = column.filters || {}
+        column.filters.notifications = column.filters.notifications || {}
+
+        column.filters.notifications.reasons =
+          column.filters.notifications.reasons || {}
+
+        const queryTerms = getSearchQueryTerms(column.filters.query || '')
+
+        const isQueryTermOfLabelType = (qt: (typeof queryTerms)[0]) =>
+          !!(
+            qt &&
+            qt.length === 3 &&
+            `${qt[0] || ''}`.toLowerCase() === 'label'
+          )
+        const isQueryTermThisLabel = (qt: (typeof queryTerms)[0]) =>
+          !!(
+            isQueryTermOfLabelType(qt) &&
+            `${qt[1] || ''}`.toLowerCase() === `${label || ''}`.toLowerCase()
+          )
+        const queryTerm = queryTerms.find(isQueryTermThisLabel)
+        const currentValue = queryTerm ? !queryTerm[2] : null
+
+        if (removeOthers) {
+          column.filters.query = getQueryStringFromQueryTerms(
+            queryTerms.filter(qt => !isQueryTermOfLabelType(qt)),
+          )
+        }
+
+        if (
+          typeof value !== 'boolean' ||
+          (removeIfAlreadySet && currentValue === value)
+        ) {
+          column.filters.query = getQueryStringFromQueryTerms(
+            queryTerms.filter(qt => !isQueryTermThisLabel(qt)),
+          )
+        } else {
+          column.filters.query = getQueryStringFromQueryTerms([
+            ...queryTerms,
+            ['label', label, !value],
+          ])
+        }
+
+        if (
+          !filterRecordHasAnyForcedValue(column.filters.notifications.reasons)
+        ) {
+          column.filters.notifications.reasons = {}
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'SET_COLUMN_REASON_FILTER':
+      return immer(state, draft => {
+        const {
+          columnId,
+          reason,
+          removeIfAlreadySet,
+          removeOthers,
+          value,
+        } = action.payload
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId] as NotificationColumn
         if (!column) return
 
         column.filters = column.filters || {}
@@ -230,11 +392,17 @@ export const columnsReducer: Reducer<State> = (
         column.filters.notifications.reasons =
           column.filters.notifications.reasons || {}
 
-        if (typeof action.payload.value === 'boolean') {
-          column.filters.notifications.reasons[action.payload.reason] =
-            action.payload.value
+        const currentValue = column.filters.notifications.reasons[reason]
+
+        if (removeOthers) column.filters.notifications.reasons = {}
+
+        if (
+          typeof value !== 'boolean' ||
+          (removeIfAlreadySet && currentValue === value)
+        ) {
+          delete column.filters.notifications.reasons[reason]
         } else {
-          delete column.filters.notifications.reasons[action.payload.reason]
+          column.filters.notifications.reasons[reason] = value
         }
 
         if (
@@ -275,6 +443,19 @@ export const columnsReducer: Reducer<State> = (
         draft.updatedAt = new Date().toISOString()
       })
 
+    case 'SET_COLUMN_BOT_FILTER':
+      return immer(state, draft => {
+        if (!draft.byId) return
+
+        const column = draft.byId[action.payload.columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        column.filters.bot = action.payload.bot
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
     case 'SET_COLUMN_DRAFT_FILTER':
       return immer(state, draft => {
         if (!draft.byId) return
@@ -309,6 +490,172 @@ export const columnsReducer: Reducer<State> = (
 
         if (!filterRecordHasAnyForcedValue(column.filters.subjectTypes)) {
           column.filters.subjectTypes = {}
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'SET_COLUMN_INVOLVES_FILTER':
+      return immer(state, draft => {
+        const { columnId, value } = action.payload
+
+        const user = `${action.payload.user || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        const filters = column.filters as IssueOrPullRequestColumnFilters
+
+        filters.involves = filters.involves || {}
+        filters.involves[user] = filters.involves[user] || undefined
+
+        if (typeof value === 'boolean') {
+          filters.involves[user] = value
+        } else {
+          filters.involves[user] = undefined
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'REPLACE_COLUMN_WATCHING_FILTER':
+      return immer(state, draft => {
+        const { columnId, owner: _owner } = action.payload
+
+        const owner = `${_owner || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!(column && column.type === 'activity')) return
+
+        column.filters = column.filters || {}
+        const filters = column.filters as ActivityColumnFilters
+        filters.watching = {}
+
+        if (owner) filters.watching[owner] = true
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'SET_COLUMN_WATCHING_FILTER':
+      return immer(state, draft => {
+        const { columnId, owner: _owner, value } = action.payload
+
+        const owner = `${_owner || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        const filters = column.filters as ActivityColumnFilters
+        filters.watching = filters.watching || {}
+
+        if (typeof value === 'boolean') {
+          filters.watching[owner] = value
+        } else {
+          delete filters.watching[owner]
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'REPLACE_COLUMN_OWNER_FILTER':
+      return immer(state, draft => {
+        const { columnId, owner: _owner } = action.payload
+
+        const owner = `${_owner || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        column.filters.owners = column.filters.owners || {}
+
+        Object.keys(column.filters.owners).forEach(existingOwner => {
+          if (column.filters!.owners![existingOwner]) {
+            column.filters!.owners![existingOwner]!.value = undefined
+            column.filters!.owners![existingOwner]!.repos = undefined
+          }
+        })
+
+        if (owner) {
+          column.filters.owners[owner] = {
+            value: true,
+            repos: {},
+          }
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'SET_COLUMN_OWNER_FILTER':
+      return immer(state, draft => {
+        const { columnId, owner: _owner, value } = action.payload
+
+        const owner = `${_owner || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        column.filters.owners = column.filters.owners || {}
+
+        column.filters.owners[owner] = column.filters.owners[owner] || {
+          value: undefined,
+          repos: {},
+        }
+
+        if (typeof value === 'boolean') {
+          column.filters.owners[owner]!.value = value
+        } else {
+          column.filters.owners[owner]!.value = undefined
+
+          if (
+            !filterRecordHasAnyForcedValue(column.filters.owners[owner]!.repos)
+          ) {
+            delete column.filters.owners[owner]
+          }
+        }
+
+        draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'SET_COLUMN_REPO_FILTER':
+      return immer(state, draft => {
+        const { columnId, value } = action.payload
+
+        const owner = `${action.payload.owner || ''}`.toLowerCase()
+        const repo = `${action.payload.repo || ''}`.toLowerCase()
+
+        if (!draft.byId) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        column.filters.owners = column.filters.owners || {}
+
+        column.filters.owners[owner] = column.filters.owners[owner] || {
+          value: undefined,
+          repos: {},
+        }
+        column.filters.owners[owner]!.repos =
+          column.filters.owners[owner]!.repos || {}
+
+        if (typeof value === 'boolean') {
+          column.filters.owners[owner]!.repos![repo] = value
+        } else {
+          delete column.filters.owners[owner]!.repos![repo]
         }
 
         draft.updatedAt = new Date().toISOString()
@@ -354,6 +701,59 @@ export const columnsReducer: Reducer<State> = (
             : action.payload.clearedAt || new Date().toISOString()
 
         draft.updatedAt = new Date().toISOString()
+      })
+
+    case 'CHANGE_ISSUE_NUMBER_FILTER':
+      return immer(state, draft => {
+        if (!draft.byId) return
+
+        const {
+          columnId,
+          issueNumber,
+          removeIfAlreadySet,
+          removeOthers,
+          value,
+        } = action.payload
+
+        if (!(columnId && issueNumber)) return
+
+        const column = draft.byId[columnId]
+        if (!column) return
+
+        column.filters = column.filters || {}
+        column.filters.query = column.filters.query || ''
+
+        draft.updatedAt = new Date().toISOString()
+
+        if (
+          column.filters.query.match(new RegExp(`-#(${issueNumber})(\s|$)`))
+        ) {
+          column.filters.query = column.filters.query.replace(
+            new RegExp(`-#(${issueNumber})(\s|$)`),
+            '',
+          )
+        } else if (
+          column.filters.query.match(new RegExp(`#(${issueNumber})(\s|$)`))
+        ) {
+          column.filters.query = column.filters.query.replace(
+            new RegExp(`#(${issueNumber})(\s|$)`),
+            '',
+          )
+          if (removeIfAlreadySet) return
+        }
+
+        if (removeOthers) {
+          column.filters.query = column.filters.query.replace(
+            /[-]?#([0-9]+)(\s|$)/gi,
+            '',
+          )
+        }
+
+        if (typeof value !== 'boolean') return
+
+        column.filters.query = `${column.filters.query.trim()} ${
+          value === false ? '-' : ''
+        }#${issueNumber}`.trim()
       })
 
     default:

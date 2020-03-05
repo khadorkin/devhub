@@ -1,56 +1,47 @@
 {
   "name": "@devhub/mobile",
-  "version": "0.81.0",
+  "version": "0.100.2",
   "private": false,
   "scripts": {
+    "android": "react-native run-android",
     "clean": "cd .",
-    "compile": "tsc -b",
+    "compile": "tsc -b --incremental",
     "format": "prettier --write '{.,src/**}/*.{js,jsx,ts,tsx}'",
+    "ios": "react-native run-ios --simulator \"iPhone 11 Pro Max\"",
     "lint": "tslint -p .",
     "prepare": "cd .. && yarn patch-package",
-    "start": "node ../../node_modules/react-native/local-cli/cli.js start --projectRoot=../../",
+    "start": "react-native start",
     "studio": "open -a /Applications/Android\\ Studio.app ./android/",
     "test": "jest",
-    "tsc": "tsc -b",
+    "tsc": "tsc -b --incremental",
     "xcode": "open ios/devhub.xcworkspace"
   },
   "dependencies": {
-    "@devhub/components": "0.81.0",
-    "metro-react-native-babel-preset": "0.53.1",
-    "react": "16.8.6",
-    "react-native": "0.59.8",
-    "react-native-firebase": "5.2.3",
-    "react-native-google-analytics-bridge": "7.1.0",
-    "react-native-inappbrowser-reborn": "2.0.0",
-    "react-native-screens": "1.0.0-alpha.22",
-    "react-native-store-review": "0.1.5"
+    "@devhub/components": "0.100.2",
+    "@react-native-firebase/analytics": "6.0.0",
+    "@react-native-firebase/app": "6.0.0",
+    "bugsnag-react-native": "2.23.2",
+    "intl": "1.2.5",
+    "intl-locales-supported": "1.6.0",
+    "react": "16.12.0",
+    "react-native": "0.61.5",
+    "react-native-gesture-handler": "1.5.2",
+    "react-native-haptic-feedback": "1.8.2",
+    "react-native-inappbrowser-reborn": "3.1.0",
+    "react-native-linear-gradient": "2.5.6",
+    "react-native-prompt-android": "1.1.0",
+    "react-native-safe-area-context": "0.3.6",
+    "react-native-splash-screen": "3.2.0",
+    "react-native-store-review": "0.1.5",
+    "react-native-vector-icons": "6.6.0"
+  },
+  "devDependencies": {
+    "@react-native-community/eslint-config": "0.0.5",
+    "babel-jest": "24.9.0",
+    "jest": "24.9.0",
+    "react-test-renderer": "16.12.0"
   },
   "jest": {
-    "preset": "react-native",
-    "setupFiles": [
-      "./jest/setup.js"
-    ],
-    "globals": {
-      "ts-jest": {
-        "useBabelrc": true
-      }
-    },
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json"
-    ],
-    "transform": {
-      "^.+\\.(jsx?)$": "<rootDir>/node_modules/babel-jest",
-      "^.+\\.(tsx?)$": "<rootDir>/node_modules/ts-jest/preprocessor.js"
-    },
-    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-    "testPathIgnorePatterns": [
-      "<rootDir>/node_modules/",
-      "<rootDir>/.history/"
-    ],
-    "cacheDirectory": ".jest/cache"
+    "preset": "react-native"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "public": true,
+  "name": "devhub-landing",
+  "alias": "devhubapp.com",
+  "version": 2,
+  "builds": [
+    {
+      "src": "next.config.js",
+      "use": "@now/next"
+    }
+  ],
+  "github": {
+    "enabled": false,
+    "autoAlias": false
+  }
+}

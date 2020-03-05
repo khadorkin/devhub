@@ -1,12 +1,15 @@
 import { User } from '@devhub/core'
 import { createAction, createErrorAction } from '../helpers'
-import { AuthError } from '../reducers/auth'
+import { AuthError, State as AuthState } from '../reducers/auth'
 
 export function loginRequest(payload: { appToken: string }) {
   return createAction('LOGIN_REQUEST', payload)
 }
 
-export function loginSuccess(payload: { appToken: string; user: User }) {
+export function loginSuccess(payload: {
+  appToken: string
+  user: NonNullable<User>
+}) {
   return createAction('LOGIN_SUCCESS', payload)
 }
 
@@ -16,6 +19,12 @@ export function loginFailure<E extends AuthError>(error: E) {
 
 export function logout() {
   return createAction('LOGOUT')
+}
+
+export function updateUserData(
+  payload: Pick<Partial<NonNullable<AuthState['user']>>, 'plan'>,
+) {
+  return createAction('UPDATE_USER_DATA', payload)
 }
 
 export function deleteAccountRequest() {

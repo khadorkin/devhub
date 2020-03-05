@@ -1,15 +1,22 @@
 import { analytics } from '../../libs/analytics'
 import { Middleware } from '../types'
 
+const strsToMatch = [
+  'LOGIN',
+  'LOGOUT',
+  'ACCOUNT',
+  'USER',
+  'SYNC',
+  'BANNER',
+  'THEME',
+  'INSTALLATION',
+]
+
 export const analyticsMiddleware: Middleware = () => next => action => {
-  if (
-    action &&
-    !action.type.includes('@') &&
-    !action.type.includes('persist') &&
-    !action.type.includes('MODAL') &&
-    !action.type.includes('FETCH')
-  ) {
-    analytics.trackEvent('redux', 'dispatch', action.type)
+  if (action && strsToMatch.some(str => action.type.includes(str))) {
+    setTimeout(() => {
+      analytics.trackEvent('redux', 'dispatch', action.type)
+    }, 0)
   }
 
   next(action)

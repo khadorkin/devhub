@@ -1,15 +1,19 @@
 import React, { useRef } from 'react'
-import { StyleSheet, View, ViewStyle } from 'react-native'
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
 
-import { ThemeColors } from '@devhub/core'
+import { Theme, ThemeColors } from '@devhub/core'
 import { Platform } from '../../libs/platform'
-import { contentPadding } from '../../styles/variables'
-import { ThemedIcon, ThemedIconProps } from '../themed/ThemedIcon'
+import { sharedStyles } from '../../styles/shared'
+import { contentPadding, smallerTextSize } from '../../styles/variables'
+import { ThemedIcon } from '../themed/ThemedIcon'
 import { ThemedText } from '../themed/ThemedText'
 import { ThemedView } from '../themed/ThemedView'
+import { Spacer } from './Spacer'
 import { TouchableOpacity, TouchableOpacityProps } from './TouchableOpacity'
 
-const checkboxBorderRadius = 4
+export const checkboxBorderRadius = 4
+export const defaultCheckboxSize = 16
+export const checkboxLabelSpacing = contentPadding / 2
 
 const styles = StyleSheet.create({
   container: {
@@ -37,33 +41,28 @@ const styles = StyleSheet.create({
 })
 
 export interface CheckboxProps {
-  analyticsLabel: TouchableOpacityProps['analyticsLabel']
+  analyticsLabel?: TouchableOpacityProps['analyticsLabel']
   checked?: boolean | null
   circle?: boolean
-  containerStyle?: ViewStyle
+  containerStyle?: StyleProp<ViewStyle>
   defaultValue?: boolean | null
   disabled?: boolean
   enableIndeterminateState?: boolean
   label?: string | React.ReactNode
-  labelIcon?: ThemedIconProps['name']
   labelTooltip?: string
+  left?: React.ReactNode
   onChange?: (value: boolean | null) => void
+  right?: React.ReactNode
   size?: number
-  squareContainerStyle?: ViewStyle
+  squareContainerStyle?: StyleProp<ViewStyle>
   useBrandColor?: boolean
 
-  checkedBackgroundThemeColor?:
-    | keyof ThemeColors
-    | ((theme: ThemeColors) => string)
-  checkedForegroundThemeColor?:
-    | keyof ThemeColors
-    | ((theme: ThemeColors) => string)
-  uncheckedBackgroundThemeColor?:
-    | keyof ThemeColors
-    | ((theme: ThemeColors) => string)
-  uncheckedForegroundThemeColor?:
-    | keyof ThemeColors
-    | ((theme: ThemeColors) => string)
+  checkedBackgroundThemeColor?: keyof ThemeColors | ((theme: Theme) => string)
+  checkedForegroundThemeColor?: keyof ThemeColors | ((theme: Theme) => string)
+  uncheckedBackgroundThemeColor?: keyof ThemeColors | ((theme: Theme) => string)
+  // uncheckedForegroundThemeColor?:
+  //   | keyof ThemeColors
+  //   | ((theme: Theme) => string)
 }
 
 export function Checkbox(props: CheckboxProps) {
@@ -72,22 +71,25 @@ export function Checkbox(props: CheckboxProps) {
     checked = defaultValue,
 
     analyticsLabel,
-    squareContainerStyle,
     circle,
     containerStyle,
-    disabled,
+    disabled: _disabled,
     enableIndeterminateState = false,
     label,
-    labelIcon,
     labelTooltip,
+    left,
     onChange,
-    size = 16,
+    right,
+    size = defaultCheckboxSize,
+    squareContainerStyle,
 
     checkedBackgroundThemeColor = 'primaryBackgroundColor',
     checkedForegroundThemeColor = 'primaryForegroundColor',
-    uncheckedBackgroundThemeColor,
-    uncheckedForegroundThemeColor = 'foregroundColor',
+    uncheckedBackgroundThemeColor = 'backgroundColorLess4',
+    // uncheckedForegroundThemeColor = 'foregroundColor',
   } = props
+
+  const disabled = _disabled || !onChange
 
   const lastBooleanRef = useRef(
     typeof props.checked === 'boolean'
@@ -131,16 +133,17 @@ export function Checkbox(props: CheckboxProps) {
       analyticsLabel={analyticsLabel}
       disabled={disabled}
       onPress={disabled ? undefined : handleOnChange}
-      style={[styles.container, containerStyle]}
+      style={[styles.container, containerStyle, sharedStyles.opacity100]}
     >
       <View
         style={[
           styles.checkboxContainer,
           {
             width: size,
-            height: size,
+            height: Math.max(20, size + 4),
             borderRadius: circle ? size / 2 : checkboxBorderRadius,
           },
+          disabled && sharedStyles.muted,
           squareContainerStyle,
         ]}
       >
@@ -148,7 +151,7 @@ export function Checkbox(props: CheckboxProps) {
           borderColor={
             checked || isIndeterminateState
               ? checkedBackgroundThemeColor
-              : uncheckedForegroundThemeColor
+              : uncheckedBackgroundThemeColor
           }
           style={[
             styles.checkbox,
@@ -189,57 +192,80 @@ export function Checkbox(props: CheckboxProps) {
             <ThemedIcon
               color={checkedForegroundThemeColor}
               name="check"
-              size={size - 3}
-              style={{
-                lineHeight: size - 3,
-                paddingLeft: Platform.OS === 'android' ? 0 : 1,
-                paddingTop: Platform.OS === 'ios' ? 1 : 0,
-                paddingBottom: Platform.OS === 'android' ? 1 : 0,
-                textAlign: 'center',
-                opacity: checked ? 1 : 0,
-              }}
+              size={size - 5}
+              style={[
+                sharedStyles.textCenter,
+                {
+                  lineHeight: size - 5,
+                  ...Platform.selectUsingRealOS({
+                    ios: {
+                      paddingTop: 1,
+                    },
+                    android: {},
+                    default: {
+                      paddingBottom: 1,
+                    },
+                  }),
+                  opacity: checked ? 1 : 0,
+                },
+              ]}
             />
           </View>
         </ThemedView>
       </View>
 
+      <Spacer width={checkboxLabelSpacing} />
+
+      {!!left && (
+        <View style={[sharedStyles.horizontal, disabled && sharedStyles.muted]}>
+          {left}
+          <Spacer width={checkboxLabelSpacing} />
+        </View>
+      )}
+
       {!!label && (
         <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            alignContent: 'center',
-            justifyContent: 'space-between',
-          }}
+          style={[
+            sharedStyles.flex,
+            sharedStyles.horizontalAndVerticallyAligned,
+            sharedStyles.justifyContentSpaceBetween,
+            typeof label !== 'string' && disabled && sharedStyles.muted,
+          ]}
         >
           {typeof label === 'string' ? (
             <ThemedText
-              color="foregroundColor"
-              style={{
-                lineHeight: size,
-                marginLeft: contentPadding / 2,
-              }}
-              {...!!labelTooltip &&
+              color={disabled ? 'foregroundColorMuted40' : 'foregroundColor'}
+              numberOfLines={1}
+              style={[sharedStyles.flex, { lineHeight: size }]}
+              {...(!!labelTooltip &&
                 Platform.select({
                   web: { title: labelTooltip },
-                })}
+                }))}
             >
               {label}
             </ThemedText>
           ) : (
             label
           )}
-
-          {!!labelIcon && (
-            <ThemedIcon
-              color="foregroundColor"
-              name={labelIcon}
-              size={16}
-              style={{ lineHeight: 16 }}
-            />
-          )}
         </View>
       )}
+
+      {!!right &&
+        (typeof right === 'string' ? (
+          <ThemedText
+            color="foregroundColorMuted40"
+            style={{ fontSize: smallerTextSize }}
+          >
+            {right}
+          </ThemedText>
+        ) : (
+          <View
+            style={[sharedStyles.horizontal, disabled && sharedStyles.muted]}
+          >
+            <Spacer width={contentPadding / 2} />
+            {right}
+          </View>
+        ))}
     </TouchableOpacity>
   )
 }

@@ -1,19 +1,19 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 
-import { getColumnHeaderDetails, Omit } from '@devhub/core'
+import { getColumnHeaderDetails } from '@devhub/core'
 import {
   IssueOrPullRequestCardsContainer,
   IssueOrPullRequestCardsContainerProps,
 } from '../../containers/IssueOrPullRequestCardsContainer'
-import { ColumnRenderer } from './ColumnRenderer'
+import { ColumnRenderer, ColumnRendererProps } from './ColumnRenderer'
 
 export interface IssueOrPullRequestColumnProps
   extends Omit<
     IssueOrPullRequestCardsContainerProps,
-    'cardViewMode' | 'enableCompactLabels' | 'repoIsKnown'
+    'ownerIsKnown' | 'repoIsKnown'
   > {
+  columnId: string
   columnIndex: number
-  disableColumnOptions?: boolean
   headerDetails: ReturnType<typeof getColumnHeaderDetails>
   pagingEnabled?: boolean
 }
@@ -21,24 +21,40 @@ export interface IssueOrPullRequestColumnProps
 export const IssueOrPullRequestColumn = React.memo(
   (props: IssueOrPullRequestColumnProps) => {
     const {
-      column,
+      columnId,
       columnIndex,
-      disableColumnOptions,
       headerDetails,
       pagingEnabled,
+      pointerEvents,
+      swipeable,
     } = props
+
+    const Children = useMemo<ColumnRendererProps['children']>(
+      () => (
+        <IssueOrPullRequestCardsContainer
+          key={`issue-or-pr-cards-container-${columnId}`}
+          columnId={columnId}
+          pointerEvents={pointerEvents}
+          swipeable={swipeable}
+        />
+      ),
+      [columnId, columnIndex, pointerEvents, swipeable],
+    )
 
     if (!headerDetails) return null
 
     return (
       <ColumnRenderer
-        key={`issue-or-pr-column-${column.id}-inner`}
-        avatarRepo={headerDetails.avatarProps && headerDetails.avatarProps.repo}
-        avatarUsername={
-          headerDetails.avatarProps && headerDetails.avatarProps.username
+        key={`issue-or-pr-column-${columnId}-inner`}
+        avatarImageURL={
+          headerDetails.avatarProps && headerDetails.avatarProps.imageURL
         }
-        column={column}
-        disableColumnOptions={disableColumnOptions}
+        avatarLinkURL={
+          headerDetails.avatarProps && headerDetails.avatarProps.linkURL
+        }
+        columnId={columnId}
+        columnIndex={columnIndex}
+        columnType="issue_or_pr"
         icon={headerDetails.icon}
         owner={headerDetails.owner}
         pagingEnabled={pagingEnabled}
@@ -47,17 +63,10 @@ export const IssueOrPullRequestColumn = React.memo(
         subtitle={headerDetails.subtitle}
         title={headerDetails.title}
       >
-        {({ cardViewMode, enableCompactLabels }) => (
-          <IssueOrPullRequestCardsContainer
-            {...props}
-            key={`issue-or-pr-cards-container-${column.id}`}
-            cardViewMode={cardViewMode}
-            columnIndex={columnIndex}
-            enableCompactLabels={enableCompactLabels}
-            repoIsKnown={headerDetails.repoIsKnown}
-          />
-        )}
+        {Children}
       </ColumnRenderer>
     )
   },
 )
+
+IssueOrPullRequestColumn.displayName = 'IssueOrPullRequestColumn'

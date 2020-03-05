@@ -1,6 +1,6 @@
 import React from 'react'
+import { FlatList, FlatListProps } from 'react-native'
 
-import { FlatList, FlatListProps } from '../../libs/flatlist'
 import {
   ScrollViewWithOverlay,
   ScrollViewWithOverlayProps,
@@ -8,22 +8,20 @@ import {
 
 export interface FlatListWithOverlayProps<TItem>
   extends FlatListProps<TItem>,
-    ScrollViewWithOverlayProps {}
+    ScrollViewWithOverlayProps {
+  keyExtractor: NonNullable<FlatListProps<TItem>['keyExtractor']>
+}
 
 export const FlatListWithOverlay = React.forwardRef(
   (props: FlatListWithOverlayProps<any>, ref: any) => {
-    const {
-      horizontal,
-      overlayThemeColor = 'backgroundColor',
-      ...restProps
-    } = props
-
     return (
       <ScrollViewWithOverlay
         ref={ref}
-        {...restProps}
+        {...props}
         ScrollViewComponent={FlatList}
       />
     )
   },
 )
+
+FlatListWithOverlay.displayName = 'FlatListWithOverlay'

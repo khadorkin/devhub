@@ -1,26 +1,31 @@
-import { lighten } from 'polished'
 import React from 'react'
 import {
   Switch as SwitchComponent,
   SwitchProps as SwitchPropsOriginal,
 } from 'react-native'
 
+import { Theme, ThemeColors } from '@devhub/core'
 import { analytics } from '../../libs/analytics'
 import { Platform } from '../../libs/platform'
+import { mutedOpacity } from '../../styles/variables'
 import { useTheme } from '../context/ThemeContext'
 
 export interface SwitchProps extends SwitchPropsOriginal {
   analyticsLabel: string | undefined
   analyticsValue?: number | undefined
-  analyticsPayload?: Record<string, string | number | undefined> | undefined
+  color?: keyof ThemeColors | ((theme: Theme) => string)
 }
 
-export function Switch({
-  analyticsLabel,
-  analyticsValue,
-  onValueChange: _onValueChange,
-  ...props
-}: SwitchProps) {
+export function Switch(props: SwitchProps) {
+  const {
+    analyticsLabel,
+    analyticsValue,
+    color: _color,
+    onValueChange: _onValueChange,
+    style,
+    ...otherProps
+  } = props
+
   const theme = useTheme()
 
   const onValueChange: typeof _onValueChange =
@@ -38,24 +43,22 @@ export function Switch({
 
   return (
     <SwitchComponent
+      activeThumbColor={theme.white}
+      data-switch
+      data-switch-disabled={!!props.disabled}
       onValueChange={onValueChange}
-      {...Platform.select({
-        android: {
-          thumbColor: props.value ? theme.primaryBackgroundColor : 'gray',
-          trackColor: {
-            false: 'lightgray',
-            true: lighten(0.4, theme.primaryBackgroundColor),
-          },
+      style={[
+        style,
+        Platform.OS === 'android' && {
+          opacity: otherProps.disabled ? mutedOpacity : 1,
         },
-        ios: {
-          trackColor: { false: '', true: theme.primaryBackgroundColor },
-        },
-        web: {
-          activeThumbColor: '#FFFFFF',
-          onTintColor: theme.primaryBackgroundColor,
-        },
-      })}
-      {...props}
+      ]}
+      thumbColor={theme.white}
+      trackColor={{
+        false: theme.backgroundColorLess5,
+        true: theme.primaryBackgroundColor,
+      }}
+      {...otherProps}
     />
   )
 }

@@ -1,131 +1,114 @@
-import _ from 'lodash'
-
 import {
-  ColumnFilters,
   ColumnSubscription,
-  EnhancedGitHubEvent,
-  EnhancedGitHubIssueOrPullRequest,
-  EnhancedGitHubNotification,
-  getFilteredEvents,
-  getFilteredIssueOrPullRequests,
-  getFilteredNotifications,
-  sortEvents,
-  sortIssuesOrPullRequests,
-  sortNotifications,
+  constants,
+  getItemsFromSubscriptions,
 } from '@devhub/core'
+import _ from 'lodash'
+import { createSelector } from 'reselect'
+
+import { EMPTY_ARRAY, EMPTY_OBJ } from '../../utils/constants'
 import { RootState } from '../types'
-import { createArraySelector } from './helpers'
+import { currentUserPlanSelector } from './auth'
+import { columnsArrSelector } from './columns'
+import { betterMemoize, createShallowEqualSelector } from './helpers'
 
-const emptyArray: any[] = []
-const emptyObj = {}
-
-const s = (state: RootState) => state.subscriptions || emptyObj
+const s = (state: RootState) => state.subscriptions || EMPTY_OBJ
 
 export const subscriptionIdsSelector = (state: RootState) =>
-  s(state).allIds || emptyArray
+  s(state).allIds || EMPTY_ARRAY
+
+export const subscriptionsByIdSelector = (state: RootState) =>
+  s(state).byId || EMPTY_OBJ
 
 export const subscriptionSelector = (state: RootState, id: string) =>
-  (s(state).byId && s(state).byId[id]) || undefined
+  subscriptionsByIdSelector(state)[id] || undefined
 
-export const subscriptionsArrSelector = createArraySelector(
-  (state: RootState) => subscriptionIdsSelector(state),
+export const allSubscriptionsArrSelector = createShallowEqualSelector(
   (state: RootState) => s(state).byId,
-  (ids, byId) =>
-    byId && ids ? ids.map(id => byId[id]).filter(Boolean) : emptyArray,
+  (state: RootState) => subscriptionIdsSelector(state),
+  (byId, subscriptionIds): ColumnSubscription[] => {
+    if (!(byId && subscriptionIds && subscriptionIds.length)) return EMPTY_ARRAY
+
+    return subscriptionIds
+      .map(id => byId[id])
+      .filter(Boolean) as ColumnSubscription[]
+  },
 )
 
-export const createSubscriptionsDataSelector = () =>
-  createArraySelector(
-    (state: RootState, subscriptionIds: string[]) =>
-      subscriptionIds
-        .map(id => subscriptionSelector(state, id))
-        .filter(Boolean),
-    subscriptions => {
-      let items: ColumnSubscription['data']['items']
+export const userSubscriptionsArrSelector = createShallowEqualSelector(
+  (state: RootState) => currentUserPlanSelector(state),
+  (state: RootState) => columnsArrSelector(state),
+  (state: RootState) => subscriptionsByIdSelector(state),
+  (plan, columns, byId): ColumnSubscription[] => {
+    if (!(plan && columns && columns.length && byId)) return EMPTY_ARRAY
 
-      subscriptions.forEach(subscription => {
-        if (
-          !(
-            subscription &&
-            subscription.data &&
-            subscription.data.items &&
-            subscription.data.items.length
-          )
-        )
-          return
+    const limit =
+      (plan && plan.featureFlags.columnsLimit) || constants.COLUMNS_LIMIT
+    const validColumns = columns
+      .filter(c => c.subscriptionIds && c.subscriptionIds.length)
+      .slice(0, limit)
 
-        if (!items) {
-          items = subscription.data.items
-        } else if (subscription.data.items) {
-          items = [...items, ...subscription.data.items] as any
-        }
-      })
+    const ids = _.uniq(
+      validColumns.reduce<string[]>((result, column) => {
+        return result.concat(column.subscriptionIds)
+      }, []),
+    )
 
-      if (!(items && items.length)) return emptyArray
+    return ids.map(id => byId[id]).filter(Boolean) as ColumnSubscription[]
+  },
+)
 
-      if (subscriptions[0] && subscriptions[0]!.type === 'activity') {
-        return sortEvents(items as EnhancedGitHubEvent[])
-      }
-
-      if (subscriptions[0] && subscriptions[0]!.type === 'issue_or_pr') {
-        return sortIssuesOrPullRequests(
-          items as EnhancedGitHubIssueOrPullRequest[],
-        )
-      }
-
-      if (subscriptions[0] && subscriptions[0]!.type === 'notifications') {
-        return sortNotifications(items as EnhancedGitHubNotification[])
-      }
-
-      console.error(`Unhandled subscription type: ${subscriptions[0]!.type}`)
-      return items
+export const createSubscriptionsSelector = () =>
+  createShallowEqualSelector(
+    (_state: RootState, subscriptionIds: string[]) =>
+      subscriptionIds || EMPTY_ARRAY,
+    (state: RootState, _subscriptionIds: string[]) =>
+      subscriptionsByIdSelector(state),
+    (subscriptionIds, byId) => {
+      return subscriptionIds
+        .map(id => byId[id])
+        .filter(Boolean) as ColumnSubscription[]
     },
   )
 
-export const createFilteredSubscriptionsDataSelector = (
-  mergeSimilar: boolean,
-) => {
-  const subscriptionsDataSelector = createSubscriptionsDataSelector()
+export const createSubscriptionsDataSelector = () => {
+  const subscriptionsSelector = createSubscriptionsSelector()
+  const memoizedGetItemsFromSubscriptions = betterMemoize(
+    getItemsFromSubscriptions,
+  )
 
-  return createArraySelector(
-    (state: RootState, subscriptionIds: string[]) => {
-      const firstSubscription = subscriptionIds
-        .map(id => subscriptionSelector(state, id))
-        .filter(Boolean)[0]
-
-      return firstSubscription && firstSubscription.type
-    },
+  return createShallowEqualSelector(
     (state: RootState, subscriptionIds: string[]) =>
-      subscriptionsDataSelector(state, subscriptionIds),
-    (_state: RootState, _subscriptionIds: string[], filters: ColumnFilters) =>
-      filters,
-    (type, items, filters) => {
-      if (!(items && items.length)) return emptyArray
+      subscriptionsSelector(state, subscriptionIds),
+    (state: RootState, _subscriptionIds: string[]) => state.data.byId,
+    (subscriptions, dataByNodeIdOrId) => {
+      const getItemByNodeIdOrId = (nodeIdOrId: string) =>
+        dataByNodeIdOrId &&
+        dataByNodeIdOrId[nodeIdOrId] &&
+        dataByNodeIdOrId[nodeIdOrId]!.item
 
-      if (type === 'activity') {
-        return getFilteredEvents(
-          items as EnhancedGitHubEvent[],
-          filters,
-          mergeSimilar,
-        )
-      }
+      const result = memoizedGetItemsFromSubscriptions(
+        subscriptions,
+        getItemByNodeIdOrId,
+      )
 
-      if (type === 'issue_or_pr') {
-        return getFilteredIssueOrPullRequests(
-          items as EnhancedGitHubIssueOrPullRequest[],
-          filters,
-        )
-      }
+      if (!(result && result.length)) return EMPTY_ARRAY
 
-      if (type === 'notifications') {
-        return getFilteredNotifications(
-          items as EnhancedGitHubNotification[],
-          filters,
-        )
-      }
-
-      console.error(`Not filtered. Unhandled subscription type: ${type}`)
-      return items
+      return result
     },
   )
 }
+
+export const subscriptionLastFetchedAtSelector = createSelector(
+  (state: RootState, subscriptionId: string) =>
+    subscriptionSelector(state, subscriptionId),
+  subscription => {
+    if (!(subscription && subscription.data)) return
+
+    return _.max([
+      subscription.data.lastFetchRequestAt,
+      subscription.data.lastFetchFailureAt,
+      subscription.data.lastFetchSuccessAt,
+    ])
+  },
+)

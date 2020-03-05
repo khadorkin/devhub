@@ -1,5 +1,10 @@
+import { EventEmitter } from 'fbemitter'
+
+import { AppState, AppStateStatus } from 'react-native'
 import { BrowserCrossPlatform } from '.'
 import { Linking } from '../linking'
+
+const emitter = new EventEmitter()
 
 export const Browser: BrowserCrossPlatform = {
   addListener: (e: any, handler: any) => {
@@ -8,12 +13,35 @@ export const Browser: BrowserCrossPlatform = {
       return { remove: () => Linking.removeEventListener(e, handler) }
     }
 
-    console.debug('[BROWSER] Ignoring addEventListener event', e) // tslint:disable-line no-console
+    if (e === 'onShow' || e === 'onDismiss') {
+      return emitter.addListener(e, handler)
+    }
+
+    console.debug('[BROWSER] Unknown addListener event', e) // tslint:disable-line no-console
     return null
   },
   dismiss: () => undefined,
-  openURL: Linking.openURL,
+  openURL: async (url: string) => {
+    emitter.emit('onShow')
+    registerAppStateListenerOnce()
+    return await Linking.openURL(url)
+  },
+  openURLOnNewTab: url => {
+    emitter.emit('onShow')
+    registerAppStateListenerOnce()
+    return window.open(url, '_blank')
+  },
   setBackgroundColor: () => undefined,
   setForegroundColor: () => undefined,
 }
 ;(Browser as any)._validateURL = (Linking as any)._validateURL
+
+function registerAppStateListenerOnce() {
+  const appStateHandlerOnce = (appState: AppStateStatus) => {
+    if (appState === 'active') {
+      AppState.removeEventListener('change', appStateHandlerOnce)
+      emitter.emit('onDismiss')
+    }
+  }
+  AppState.addEventListener('change', appStateHandlerOnce)
+}

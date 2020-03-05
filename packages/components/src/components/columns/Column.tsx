@@ -1,36 +1,50 @@
-import React, { ReactNode, useRef } from 'react'
+import { Theme, ThemeColors } from '@devhub/core'
+import React, { ReactNode, useCallback, useEffect, useRef } from 'react'
 import { StyleProp, StyleSheet, View, ViewProps, ViewStyle } from 'react-native'
+import url from 'url'
 
+import { useAppViewMode } from '../../hooks/use-app-view-mode'
 import { useEmitter } from '../../hooks/use-emitter'
+import { useIsColumnFocused } from '../../hooks/use-is-column-focused'
+import { useLastInputType } from '../../hooks/use-last-input-type'
+import { ErrorBoundary, ErrorBoundaryProps } from '../../libs/bugsnag'
 import { Platform } from '../../libs/platform'
 import { sharedStyles } from '../../styles/shared'
 import { contentPadding } from '../../styles/variables'
 import { tryFocus } from '../../utils/helpers/shared'
+import { GenericMessageWithButtonView } from '../cards/GenericMessageWithButtonView'
+import { ButtonLink } from '../common/ButtonLink'
 import { separatorThickSize } from '../common/Separator'
 import { useColumnWidth } from '../context/ColumnWidthContext'
-import { useAppLayout } from '../context/LayoutContext'
+import { DialogProvider } from '../context/DialogContext'
 import { ThemedView } from '../themed/ThemedView'
 import { ColumnSeparator } from './ColumnSeparator'
 
 export const columnMargin = contentPadding / 2
 
 export interface ColumnProps extends ViewProps {
+  backgroundColor?: keyof ThemeColors | ((theme: Theme) => string | undefined)
   children?: ReactNode
   columnId: string
-  fullWidth?: boolean
   pagingEnabled?: boolean
-  renderSideSeparators?: boolean
+  renderLeftSeparator?: boolean
+  renderRightSeparator?: boolean
   style?: StyleProp<ViewStyle>
 }
+
+export const CurrentColumnContext = React.createContext<string | undefined>(
+  undefined,
+)
 
 export const Column = React.memo(
   React.forwardRef((props: ColumnProps, ref) => {
     const {
+      backgroundColor = 'backgroundColor',
       children,
       columnId,
-      fullWidth,
       pagingEnabled,
-      renderSideSeparators,
+      renderLeftSeparator,
+      renderRightSeparator,
       style,
       ...otherProps
     } = props
@@ -38,33 +52,67 @@ export const Column = React.memo(
     const _columnRef = useRef<View>(null)
     const columnRef = (ref as React.RefObject<View>) || _columnRef
 
-    const columnBorderRef = useRef<View>(null)
-
-    const { sizename } = useAppLayout()
+    const columnBorderRef = useRef<View | null>(null)
     const columnWidth = useColumnWidth()
+    const isColumnFocused = useIsColumnFocused(columnId)
+    const lastUsedInputType = useLastInputType()
+    const { appViewMode } = useAppViewMode()
 
+    useEffect(() => {
+      return () => {
+        columnBorderRef.current = null
+      }
+    }, [])
+
+    const showPermanentColumnIndicator = !!(
+      isColumnFocused &&
+      lastUsedInputType === 'keyboard' &&
+      appViewMode === 'multi-column'
+    )
     useEmitter(
       'FOCUS_ON_COLUMN',
-      (payload: { columnId: string; highlight?: boolean }) => {
-        if (!columnBorderRef.current) return
+      useCallback(
+        payload => {
+          if (!columnBorderRef.current) return
 
-        if (!(payload.columnId && payload.columnId === columnId)) {
-          columnBorderRef.current.setNativeProps({ style: { opacity: 0 } })
-          return
-        }
-
-        if (payload.highlight) {
-          columnBorderRef.current.setNativeProps({ style: { opacity: 1 } })
-          setTimeout(() => {
-            if (!columnBorderRef.current) return
+          if (!(payload.columnId && payload.columnId === columnId)) {
             columnBorderRef.current.setNativeProps({ style: { opacity: 0 } })
-          }, 1000)
-        }
+            return
+          }
 
-        if (Platform.OS === 'web' && columnRef.current) {
-          tryFocus(columnRef.current)
-        }
-      },
+          if (payload.highlight || showPermanentColumnIndicator) {
+            columnBorderRef.current.setNativeProps({ style: { opacity: 1 } })
+
+            setTimeout(() => {
+              if (!columnBorderRef.current || showPermanentColumnIndicator)
+                return
+              columnBorderRef.current.setNativeProps({ style: { opacity: 0 } })
+            }, 1000)
+          }
+
+          if (
+            Platform.OS === 'web' &&
+            columnRef.current &&
+            !payload.focusOnVisibleItem
+          ) {
+            const currentFocusedNodeTag =
+              typeof document !== 'undefined' &&
+              document &&
+              document.activeElement &&
+              document.activeElement.tagName
+
+            if (
+              !(
+                currentFocusedNodeTag &&
+                currentFocusedNodeTag.toLowerCase() === 'input'
+              )
+            ) {
+              tryFocus(columnRef.current)
+            }
+          }
+        },
+        [columnId, showPermanentColumnIndicator],
+      ),
     )
 
     return (
@@ -72,50 +120,82 @@ export const Column = React.memo(
         {...otherProps}
         ref={columnRef}
         key={`column-${columnId}-inner`}
-        backgroundColor="backgroundColor"
+        backgroundColor={backgroundColor}
         style={[
+          sharedStyles.relative,
           sharedStyles.horizontal,
-          {
-            height: '100%',
-            overflow: 'hidden',
-          },
-          fullWidth ? sharedStyles.flex : { width: columnWidth },
+          { width: columnWidth },
+          sharedStyles.fullHeight,
+          sharedStyles.overflowHidden,
           style,
         ]}
       >
-        {!!renderSideSeparators && (
-          <ColumnSeparator
-            half
-            horizontal={false}
-            thick={sizename > '1-small'}
-          />
-        )}
-        <View style={sharedStyles.flex}>{children}</View>
-        {!!renderSideSeparators && (
-          <ColumnSeparator
-            half
-            horizontal={false}
-            thick={sizename > '1-small'}
-          />
-        )}
+        <DialogProvider>
+          <>
+            {!!renderLeftSeparator && <ColumnSeparator half />}
+            <View style={sharedStyles.flex}>
+              <ErrorBoundary FallbackComponent={ColumErrorFallbackComponent}>
+                <CurrentColumnContext.Provider value={columnId}>
+                  {children}
+                </CurrentColumnContext.Provider>
+              </ErrorBoundary>
+            </View>
+            {!!renderRightSeparator && <ColumnSeparator half />}
 
-        <ThemedView
-          ref={columnBorderRef}
-          borderColor="foregroundColorMuted60"
-          collapsable={false}
-          pointerEvents="box-none"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              borderWidth: 0,
-              borderRightWidth: Math.max(4, separatorThickSize),
-              borderLeftWidth: Math.max(4, separatorThickSize),
-              zIndex: 1000,
-              opacity: 0,
-            },
-          ]}
-        />
+            <ThemedView
+              ref={columnBorderRef}
+              borderColor="foregroundColorMuted65"
+              collapsable={false}
+              pointerEvents="box-none"
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  borderWidth: 0,
+                  borderRightWidth: Math.max(4, separatorThickSize),
+                  borderLeftWidth: Math.max(4, separatorThickSize),
+                  zIndex: 1000,
+                  opacity:
+                    isColumnFocused && lastUsedInputType === 'keyboard' ? 1 : 0,
+                },
+              ]}
+            />
+          </>
+        </DialogProvider>
       </ThemedView>
     )
   }),
 )
+
+Column.displayName = 'Column'
+
+const ColumErrorFallbackComponent: ErrorBoundaryProps['FallbackComponent'] = props => {
+  const { error, info } = props
+
+  return (
+    <ThemedView style={sharedStyles.flex}>
+      <View
+        style={[sharedStyles.flex, sharedStyles.center, sharedStyles.padding]}
+      >
+        <GenericMessageWithButtonView
+          buttonView={
+            <ButtonLink
+              analyticsLabel="column_error_boundary_open_issue_github"
+              children="Open issue on GitHub"
+              href={`https://github.com/devhubapp/devhub/issues/new?title=${url.format(
+                (error && error.message) || 'Column view crashed',
+              )}&body=${url.format(
+                (info && info.componentStack) ||
+                  (info && JSON.stringify(info)) ||
+                  '',
+              )}`}
+              openOnNewTab
+            />
+          }
+          emoji="warning"
+          subtitle="Please open an issue on GitHub."
+          title="This view has crashed"
+        />
+      </View>
+    </ThemedView>
+  )
+}

@@ -1,6 +1,6 @@
 import _ from 'lodash'
 import React, { Fragment } from 'react'
-import { ScrollView, View } from 'react-native'
+import { View } from 'react-native'
 
 export interface KeyboardShortcutsModalProps {
   showBackButton: boolean
@@ -28,6 +28,12 @@ export const keyboardShortcutsById = {
   openPreferences: { keys: ['P'], description: 'Open preferences' },
   goToNthColumn: { keys: ['1...9'], description: 'Go to the nth column' },
   goToLastColumn: { keys: ['0'], description: 'Go to the last column' },
+  openItemLink: { keys: ['Enter'], description: 'Open link of selected item' },
+  scrollToNextPage: { keys: ['Space'], description: 'Scroll to next page' },
+  scrollToPreviousPage: {
+    keys: ['Shift Space'],
+    description: 'Scroll to previous page',
+  },
   selectPreviousItem: { keys: ['↑', 'J'], description: 'Select previous item' },
   selectNextItem: { keys: ['↓', 'K'], description: 'Select next item' },
   selectPreviousColumn: {
@@ -63,6 +69,9 @@ export const keyboardShortcuts = [
   keyboardShortcutsById.openPreferences,
   keyboardShortcutsById.goToNthColumn,
   keyboardShortcutsById.goToLastColumn,
+  keyboardShortcutsById.openItemLink,
+  keyboardShortcutsById.scrollToNextPage,
+  keyboardShortcutsById.scrollToPreviousPage,
   keyboardShortcutsById.selectPreviousItem,
   keyboardShortcutsById.selectNextItem,
   keyboardShortcutsById.selectPreviousColumn,
@@ -80,34 +89,31 @@ export function KeyboardShortcutsModal(props: KeyboardShortcutsModalProps) {
 
   return (
     <ModalColumn
-      iconName="keyboard"
       name="KEYBOARD_SHORTCUTS"
       showBackButton={showBackButton}
       title="Keyboard Shortcuts"
     >
-      <ScrollView style={[sharedStyles.flex, { padding: contentPadding }]}>
+      <View style={[sharedStyles.flex, { padding: contentPadding }]}>
         {keyboardShortcuts.map((ks, index) => (
           <Fragment key={[...ks.keys, index].join('+')}>
-            <View style={{ flexDirection: 'row' }}>
+            <View style={sharedStyles.horizontal}>
               <View style={{ width: 70 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                  }}
-                >
+                <View style={[sharedStyles.horizontal, sharedStyles.flexWrap]}>
                   {ks.keys.map(key => (
                     <ThemedView
                       key={`keyboard-shortcut-label-${index}-${key}`}
                       backgroundColor="backgroundColorLess2"
-                      style={{
-                        alignSelf: 'flex-start',
-                        marginBottom: contentPadding / 2,
-                        marginRight: contentPadding / 2,
-                        paddingVertical: contentPadding / 4,
-                        paddingHorizontal: contentPadding / 2,
-                        borderRadius: contentPadding,
-                      }}
+                      style={[
+                        sharedStyles.alignSelfFlexStart,
+                        sharedStyles.flexShrink1,
+                        {
+                          marginBottom: contentPadding / 2,
+                          marginRight: contentPadding / 2,
+                          paddingVertical: contentPadding / 4,
+                          paddingHorizontal: contentPadding / 2,
+                          borderRadius: contentPadding,
+                        },
+                      ]}
                     >
                       <ThemedText
                         color="foregroundColor"
@@ -135,7 +141,7 @@ export function KeyboardShortcutsModal(props: KeyboardShortcutsModalProps) {
         ))}
 
         <Spacer height={contentPadding} />
-      </ScrollView>
+      </View>
     </ModalColumn>
   )
 }

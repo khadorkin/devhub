@@ -1,8 +1,11 @@
-import { RefObject, useEffect, useRef } from 'react'
+import debounce from 'lodash/debounce'
+import { RefObject, useCallback, useEffect, useRef } from 'react'
 
+import { emitter } from '../libs/emitter'
 import { Platform } from '../libs/platform'
 import { findNode } from '../utils/helpers/shared'
 import { useForceRerender } from './use-force-rerender'
+import { getLastUsedInputType } from './use-last-input-type'
 
 export function useHover(
   ref: RefObject<Element | any> | null,
@@ -11,24 +14,34 @@ export function useHover(
   const forceRerender = useForceRerender()
   const cacheRef = useRef(false)
 
-  if (Platform.realOS !== 'web') return false
+  if (Platform.supportsTouch) return false
+
+  const resolve = useCallback(
+    debounce(
+      (value: boolean) => {
+        if (getLastUsedInputType() !== 'mouse')
+          emitter.emit('SET_LAST_INPUT_TYPE', { type: 'mouse' })
+
+        if (cacheRef.current === value) return
+        cacheRef.current = value
+
+        if (callback) {
+          callback(value)
+          return
+        }
+
+        forceRerender()
+      },
+      5,
+      { leading: false, trailing: true },
+    ),
+    [callback],
+  )
 
   useEffect(() => {
     const node = findNode(ref)
 
     if (!(node && typeof node.addEventListener === 'function')) return
-
-    const resolve = (value: boolean) => {
-      if (cacheRef.current === value) return
-      cacheRef.current = value
-
-      if (callback) {
-        callback(value)
-        return
-      }
-
-      forceRerender()
-    }
 
     const handleMouseOver = () => resolve(true)
     const handleMouseOut = () => resolve(false)
@@ -42,7 +55,7 @@ export function useHover(
       node.removeEventListener('mouseover', handleMouseOver)
       node.removeEventListener('mouseout', handleMouseOut)
     }
-  }, [ref && ref.current, callback])
+  }, [ref && ref.current, resolve])
 
   return cacheRef.current
 }

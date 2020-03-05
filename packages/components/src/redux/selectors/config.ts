@@ -1,23 +1,25 @@
 import { createSelector } from 'reselect'
 
-import { constants, isNight } from '@devhub/core'
-import { Dimensions } from 'react-native'
-import { APP_LAYOUT_BREAKPOINTS } from '../../components/context/LayoutContext'
-import { loadTheme } from '../../styles/utils'
+import { constants, isNight, loadTheme, ThemePair } from '@devhub/core'
+import { EMPTY_OBJ } from '../../utils/constants'
 import { RootState } from '../types'
 
-const emptyObj = {}
-
-const s = (state: RootState) => state.config || emptyObj
+const s = (state: RootState) => state.config || EMPTY_OBJ
 
 export const themePairSelector = (state: RootState) =>
   s(state).theme || constants.DEFAULT_THEME_PAIR
 
+const defaultPreferredDarkThemePair: ThemePair = {
+  id: constants.DEFAULT_DARK_THEME,
+}
 export const preferredDarkThemePairSelector = (state: RootState) =>
-  s(state).preferredDarkTheme || { id: constants.DEFAULT_DARK_THEME }
+  s(state).preferredDarkTheme || defaultPreferredDarkThemePair
 
+const defaultPreferredLightThemePair: ThemePair = {
+  id: constants.DEFAULT_LIGHT_THEME,
+}
 export const preferredLightThemePairSelector = (state: RootState) =>
-  s(state).preferredLightTheme || { id: constants.DEFAULT_LIGHT_THEME }
+  s(state).preferredLightTheme || defaultPreferredLightThemePair
 
 export const themeSelector = createSelector(
   themePairSelector,
@@ -26,15 +28,3 @@ export const themeSelector = createSelector(
   isNight,
   loadTheme,
 )
-
-// Do not use this directly. Use useAppViewMode() instead.
-export const _appViewModeSelector = (state: RootState) => {
-  if (constants.DISABLE_SINGLE_COLUMN) return 'multi-column'
-
-  const isBigEnoughForMultiColumnView =
-    Dimensions.get('window').width >= APP_LAYOUT_BREAKPOINTS.MEDIUM
-
-  return isBigEnoughForMultiColumnView
-    ? s(state).appViewMode || 'multi-column'
-    : 'single-column'
-}

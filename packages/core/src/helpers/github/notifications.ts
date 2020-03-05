@@ -1,4 +1,5 @@
 import axios from 'axios'
+import immer from 'immer'
 import _ from 'lodash'
 
 import {
@@ -7,25 +8,36 @@ import {
   GitHubIcon,
   GitHubIssue,
   GitHubIssueOrPullRequest,
+  GitHubLabel,
   GitHubNotification,
-  GitHubNotificationReason,
   GitHubNotificationSubjectType,
   GitHubPullRequest,
   NotificationPayloadEnhancement,
-  Omit,
   ThemeColors,
+  UserPlan,
 } from '../../types'
-import { capitalize } from '../shared'
+import { constants } from '../../utils'
+import { isPlanStatusValid } from '../plans'
+import { capitalize, isNotificationPrivate } from '../shared'
 import {
   getCommitIconAndColor,
   getIssueIconAndColor,
+  getItemIsBot,
   getOwnerAndRepo,
   getPullRequestIconAndColor,
   getReleaseIconAndColor,
+  isItemRead,
+  isItemSaved,
 } from './shared'
-import { getCommentIdFromUrl } from './url'
+import {
+  getCommentIdFromUrl,
+  getIssueOrPullRequestNumberFromUrl,
+  getRepoFullNameFromObject,
+} from './url'
 
-export const notificationReasons: GitHubNotificationReason[] = [
+export const notificationReasons: Array<
+  EnhancedGitHubNotification['reason']
+> = [
   'assign',
   'author',
   'comment',
@@ -37,6 +49,7 @@ export const notificationReasons: GitHubNotificationReason[] = [
   'state_change',
   'subscribed',
   'team_mention',
+  'team_review_requested',
 ]
 
 export const notificationSubjectTypes: GitHubNotificationSubjectType[] = [
@@ -49,7 +62,7 @@ export const notificationSubjectTypes: GitHubNotificationSubjectType[] = [
 ]
 
 export function getNotificationSubjectType(
-  notification: GitHubNotification,
+  notification: Pick<GitHubNotification, 'subject'>,
 ): GitHubNotificationSubjectType | null {
   if (!(notification && notification.subject && notification.subject.type))
     return null
@@ -58,7 +71,7 @@ export function getNotificationSubjectType(
 }
 
 export function getNotificationIconAndColor(
-  notification: GitHubNotification,
+  notification: Pick<GitHubNotification, 'subject'>,
   payload: GitHubIssueOrPullRequest | undefined,
 ): { icon: GitHubIcon; color?: keyof ThemeColors; tooltip: string } {
   const { subject } = notification
@@ -76,17 +89,17 @@ export function getNotificationIconAndColor(
     case 'RepositoryInvitation':
       return {
         icon: 'mail',
-        color: 'brown',
+        color: undefined,
         tooltip: 'Repository invitation',
       }
     case 'RepositoryVulnerabilityAlert':
       return {
         icon: 'alert',
-        color: 'yellow',
+        color: 'orange',
         tooltip: 'Repository vulnerability alert',
       }
     default: {
-      const message = `Unknown event type: ${(event as any).type}`
+      const message = `Unknown notification subject type: ${type}`
       console.error(message)
       return { icon: 'bell', tooltip: '' }
     }
@@ -94,7 +107,7 @@ export function getNotificationIconAndColor(
 }
 
 export function getNotificationReasonMetadata<
-  T extends GitHubNotificationReason
+  T extends EnhancedGitHubNotification['reason']
 >(
   reason: T,
 ): {
@@ -190,10 +203,20 @@ export function getNotificationReasonMetadata<
     case 'review_requested':
       return {
         reason,
-        color: 'yellow',
+        color: 'orange',
         fullDescription: 'Someone requested your review in the pull request',
         // smallDescription: 'Review requested',
         label: 'Review requested',
+      }
+
+    case 'team_review_requested':
+      return {
+        reason,
+        color: 'yellow',
+        fullDescription:
+          "Someone requested your team's review in the pull request",
+        // smallDescription: 'Team review requested',
+        label: 'Team review requested',
       }
 
     case 'security_alert':
@@ -241,69 +264,84 @@ export function mergeNotificationPreservingEnhancement(
 ) {
   if (!(newItem && existingItem)) return newItem || existingItem
 
-  const lastReadAt = _.max([existingItem.last_read_at, newItem.last_read_at])
-  const lastUnreadAt = _.max([
-    existingItem.last_unread_at,
-    newItem.last_unread_at,
-  ])
-
-  const latestDate = _.max([lastReadAt, lastUnreadAt, newItem.updated_at])
-
-  const enhancements: Record<
-    keyof Omit<EnhancedGitHubNotification, keyof GitHubNotification>,
-    any
-  > = {
+  const softEnhancements: Partial<
+    Record<keyof EnhancedGitHubNotification, any>
+  > &
+    Record<
+      keyof Omit<EnhancedGitHubNotification, keyof GitHubNotification>,
+      any
+    > = {
     comment: existingItem.comment,
     commit: existingItem.commit,
     enhanced: existingItem.enhanced,
-    forceUnreadLocally:
-      existingItem.forceUnreadLocally &&
-      latestDate &&
-      latestDate === newItem.updated_at
-        ? newItem.unread
-        : existingItem.forceUnreadLocally,
     issue: existingItem.issue,
-    last_unread_at: lastUnreadAt,
+    last_read_at: _.max([existingItem.last_read_at, newItem.last_read_at]),
+    last_saved_at: _.max([existingItem.last_saved_at, newItem.last_saved_at]),
+    last_unread_at: _.max([
+      existingItem.last_unread_at,
+      newItem.last_unread_at,
+    ]),
+    last_unsaved_at: _.max([
+      existingItem.last_unsaved_at,
+      newItem.last_unsaved_at,
+    ]),
     pullRequest: existingItem.pullRequest,
+    reason: existingItem.reason,
     release: existingItem.release,
-    saved: existingItem.saved,
-  }
-
-  const mergedItem: EnhancedGitHubNotification = {
-    ...enhancements,
-    ...newItem,
-    forceUnreadLocally: enhancements.forceUnreadLocally,
-    last_read_at: lastReadAt,
-    last_unread_at: enhancements.last_unread_at,
+    requestedMyReview: existingItem.requestedMyReview,
     updated_at: _.max([existingItem.updated_at, newItem.updated_at])!,
   }
 
-  return _.isEqual(mergedItem, existingItem) ? existingItem : mergedItem
+  const forceEnhancements = _.pick(softEnhancements, [
+    'last_read_at',
+    'last_saved_at',
+    'last_unread_at',
+    'last_unsaved_at',
+    'updated_at',
+  ])
+
+  return immer(newItem, draft => {
+    Object.entries(softEnhancements).forEach(([key, value]) => {
+      if (typeof value === 'undefined') return
+      if (value === (draft as any)[key]) return
+      if (typeof (draft as any)[key] !== 'undefined') return
+      ;(draft as any)[key] = value
+    })
+
+    Object.entries(forceEnhancements).forEach(([key, value]) => {
+      if (value === (draft as any)[key]) return
+      ;(draft as any)[key] = value
+    })
+  })
 }
 
 export async function getNotificationsEnhancementMap(
   notifications: EnhancedGitHubNotification[],
   {
     cache = new Map(),
-    getGitHubInstallationTokenForRepo,
-    githubOAuthToken,
+    getGitHubPrivateTokenForRepo,
+    githubToken: _githubToken,
+    githubLogin: _githubLogin,
   }: {
     cache: EnhancementCache | undefined | undefined
-    getGitHubInstallationTokenForRepo: (
+    getGitHubPrivateTokenForRepo: (
       owner: string | undefined,
       repo: string | undefined,
     ) => string | undefined
-    githubOAuthToken: string
+    githubToken: string
+    githubLogin: string
   },
 ): Promise<Record<string, NotificationPayloadEnhancement>> {
+  const githubLogin = `${_githubLogin || ''}`.toLowerCase().trim()
+
   const promises = notifications.map(async notification => {
     if (!(notification.repository && notification.repository.full_name)) return
 
     const { owner, repo } = getOwnerAndRepo(notification.repository.full_name)
     if (!(owner && repo)) return
 
-    const installationToken = getGitHubInstallationTokenForRepo(owner, repo)
-    const githubToken = installationToken || githubOAuthToken
+    const privateToken = getGitHubPrivateTokenForRepo(owner, repo)
+    const githubToken = privateToken || _githubToken
 
     const commentId = getCommentIdFromUrl(
       notification.subject.latest_comment_url,
@@ -312,7 +350,7 @@ export async function getNotificationsEnhancementMap(
     const enhance: NotificationPayloadEnhancement = {}
 
     const isPrivate = notification.repository.private
-    const hasAccess = !isPrivate || !!installationToken
+    const hasAccess = !isPrivate || !!privateToken
     if (!hasAccess) return
 
     const hasSubjectCache = cache.has(notification.subject.url)
@@ -333,9 +371,11 @@ export async function getNotificationsEnhancementMap(
         new Date(notification.updated_at).valueOf() > subjectCache.timestamp)
     ) {
       try {
-        const { data } = await axios.get(
-          `${notification.subject.url}?access_token=${githubToken}`,
-        )
+        const { data } = await axios.get(notification.subject.url, {
+          headers: {
+            Authorization: githubToken && `token ${githubToken}`,
+          },
+        })
         if (
           !(
             data &&
@@ -356,6 +396,35 @@ export async function getNotificationsEnhancementMap(
         if (!enhance.enhanced) enhance.enhanced = false
         return
       }
+
+      // if (
+      //   subjectField === 'pullRequest' &&
+      //   enhance.pullRequest &&
+      //   notification.reason === 'review_requested' &&
+      //   !enhance.requestedMyReview
+      // ) {
+      //   try {
+      //     const { data } = await axios.get(
+      //       `${notification.subject.url}/reviews`,
+      //       {
+      //         headers: {
+      //           Authorization: githubToken && `token ${githubToken}`,
+      //         },
+      //       },
+      //     )
+
+      //     if (data && data.length) {
+      //       enhance.requestedMyReview = !!data.find(
+      //         (item: { user?: GitHubUser }) =>
+      //           item &&
+      //           item.user &&
+      //           githubLogin === `${item.user.login || ''}`.toLowerCase().trim(),
+      //       )
+      //     }
+      //   } catch (error) {
+      //     //
+      //   }
+      // }
     } else if (hasSubjectCache) {
       if (subjectCache && subjectCache.data) {
         enhance[subjectField] = subjectCache.data
@@ -366,9 +435,12 @@ export async function getNotificationsEnhancementMap(
     if (commentId && !hasCommentCache) {
       try {
         const { data } = await axios.get(
-          `${
-            notification.subject.latest_comment_url
-          }?access_token=${githubToken}`,
+          notification.subject.latest_comment_url,
+          {
+            headers: {
+              Authorization: githubToken && `token ${githubToken}`,
+            },
+          },
         )
         if (!(data && data.id)) throw new Error('Invalid response')
 
@@ -393,6 +465,25 @@ export async function getNotificationsEnhancementMap(
         enhance.comment = commentCache.data
         enhance.enhanced = true
       } else if (!enhance.enhanced) enhance.enhanced = false
+    }
+
+    if (
+      githubLogin &&
+      enhance.pullRequest &&
+      enhance.pullRequest.requested_reviewers
+    ) {
+      if (!enhance.requestedMyReview) {
+        enhance.requestedMyReview = !!enhance.pullRequest.requested_reviewers.find(
+          u => githubLogin === `${u.login || ''}`.toLowerCase().trim(),
+        )
+      }
+    }
+
+    if (
+      notification.reason === 'review_requested' &&
+      enhance.requestedMyReview === false
+    ) {
+      enhance.reason = 'team_review_requested'
     }
 
     if (!Object.keys(enhance).length) return
@@ -421,6 +512,8 @@ export function enhanceNotifications(
   enhancementMap: Record<string, NotificationPayloadEnhancement>,
   currentEnhancedNotifications: EnhancedGitHubNotification[] = [],
 ) {
+  if (!(notifications && notifications.length)) return constants.EMPTY_ARRAY
+
   return notifications.map(item => {
     const enhanced = currentEnhancedNotifications.find(n => n.id === item.id)
 
@@ -437,11 +530,22 @@ export function enhanceNotifications(
   })
 }
 
-export function getOlderNotificationDate(
-  notifications: EnhancedGitHubNotification[],
-) {
-  const olderItem = sortNotifications(notifications).pop()
-  return olderItem && olderItem.updated_at
+export function getOlderOrNewerNotificationDate(
+  order: 'newer' | 'older',
+  items: EnhancedGitHubNotification[] | undefined,
+  { ignoreFutureDates = true } = {},
+): string | undefined {
+  const now = Date.now()
+  return sortNotifications(
+    items,
+    'updated_at',
+    order === 'newer' ? 'desc' : 'asc',
+  )
+    .map(item => item.updated_at)
+    .filter(
+      date =>
+        !!(date && ignoreFutureDates ? now > new Date(date).getTime() : true),
+    )[0]
 }
 
 export function createNotificationsCache(
@@ -473,11 +577,151 @@ export function createNotificationsCache(
 
 export function sortNotifications(
   notifications: EnhancedGitHubNotification[] | undefined,
+  field: keyof EnhancedGitHubNotification = 'updated_at',
+  order: 'asc' | 'desc' = 'desc',
 ) {
-  if (!notifications) return []
+  if (!(notifications && notifications.length)) return constants.EMPTY_ARRAY
 
   return _(notifications)
     .uniqBy('id')
-    .orderBy('updated_at', 'desc')
+    .orderBy(field, order)
     .value()
+}
+
+export function getGitHubNotificationSubItems(
+  notification: EnhancedGitHubNotification,
+  { plan }: { plan: UserPlan | null | undefined },
+) {
+  const {
+    comment,
+    id,
+    repository: repo,
+    subject,
+    updated_at: updatedAt,
+  } = notification
+
+  const isRead = isItemRead(notification)
+  const isSaved = isItemSaved(notification)
+  const isPrivate = isNotificationPrivate(notification)
+
+  const canSee =
+    !isPrivate ||
+    !!(
+      plan &&
+      isPlanStatusValid(plan) &&
+      plan.featureFlags.enablePrivateRepositories
+    )
+
+  const commit =
+    notification.commit ||
+    (subject.type === 'Commit' && {
+      author: { avatar_url: '', login: '', html_url: '' },
+      commit: {
+        author: {
+          name: '',
+          email: '',
+        },
+        message: subject.title,
+        url: subject.url,
+        comment_count: undefined,
+      },
+      url: subject.url,
+    }) ||
+    null
+
+  const issue =
+    notification.issue ||
+    (subject.type === 'Issue' && {
+      id: undefined,
+      body: undefined,
+      comments: undefined,
+      created_at: undefined,
+      labels: [] as GitHubLabel[],
+      number: getIssueOrPullRequestNumberFromUrl(
+        subject.url || subject.latest_comment_url,
+      ),
+      state: undefined,
+      title: subject.title,
+      url: subject.url || subject.latest_comment_url,
+      html_url: '',
+      user: { avatar_url: '', login: '', html_url: '' },
+    }) ||
+    null
+
+  const pullRequest =
+    notification.pullRequest ||
+    (subject.type === 'PullRequest' && {
+      id: undefined,
+      body: undefined,
+      created_at: undefined,
+      comments: undefined,
+      labels: [] as GitHubLabel[],
+      draft: false,
+      number: getIssueOrPullRequestNumberFromUrl(
+        subject.url || subject.latest_comment_url,
+      ),
+      state: undefined,
+      title: subject.title,
+      url: subject.url || subject.latest_comment_url,
+      html_url: '',
+      user: { avatar_url: '', login: '', html_url: '' },
+    }) ||
+    undefined
+
+  const release =
+    notification.release ||
+    (subject.type === 'Release' && {
+      id: undefined,
+      author: { avatar_url: '', login: '', html_url: '' },
+      body: '',
+      created_at: undefined,
+      name: subject.title,
+      tag_name: '',
+      url: subject.url || subject.latest_comment_url,
+    }) ||
+    undefined
+
+  const issueOrPullRequest = issue || pullRequest
+  const createdAt = issueOrPullRequest && issueOrPullRequest.created_at
+
+  const isRepoInvitation = subject.type === 'RepositoryInvitation'
+  const isVulnerabilityAlert = subject.type === 'RepositoryVulnerabilityAlert'
+
+  const issueOrPullRequestNumber = issueOrPullRequest
+    ? issueOrPullRequest.number ||
+      getIssueOrPullRequestNumberFromUrl(
+        issueOrPullRequest.html_url || issueOrPullRequest.url,
+      )
+    : undefined
+
+  const repoFullName = getRepoFullNameFromObject(notification.repository)
+
+  const isBot = getItemIsBot('notifications', notification, {
+    considerProfileBotsAsBots: false,
+  })
+  const isBotOrFakeBot = getItemIsBot('notifications', notification, {
+    considerProfileBotsAsBots: true,
+  })
+
+  return {
+    canSee,
+    comment,
+    commit,
+    createdAt,
+    id,
+    isBot,
+    isBotOrFakeBot,
+    isPrivate,
+    isRead,
+    isRepoInvitation,
+    isSaved,
+    isVulnerabilityAlert,
+    issueOrPullRequest,
+    issueOrPullRequestNumber,
+    release,
+    repo,
+    repoFullName,
+    subject,
+    updatedAt,
+  }
 }

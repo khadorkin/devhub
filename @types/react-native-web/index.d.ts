@@ -4,6 +4,7 @@ declare module 'react-native-web' {
 
 namespace JSX {
   import * as ReactNative from 'react-native'
+
   interface IntrinsicAttributes extends React.Attributes {
     accessibilityRole?:
       | ReactNative.AccessibilityRole
@@ -21,6 +22,7 @@ namespace JSX {
       | 'main' // main
       | 'navigation' // nav
       | 'region' // section
+    accessible?: boolean
     className?: string
     tabIndex?: number
   }

@@ -1,7 +1,7 @@
 import React from 'react'
 import { StyleProp } from 'react-native'
 
-import { Omit, ThemeColors } from '@devhub/core'
+import { Theme, ThemeColors, ThemeTransformer } from '@devhub/core'
 import {
   TouchableOpacity,
   TouchableOpacityProps,
@@ -11,19 +11,33 @@ import { getThemeColorOrItself } from './helpers'
 
 export interface ThemedTouchableOpacityProps
   extends Omit<TouchableOpacityProps, 'style'> {
-  backgroundColor?: keyof ThemeColors | ((theme: ThemeColors) => string)
-  style?: StyleProp<Omit<TouchableOpacityProps['style'], 'backgroundColor'>>
+  borderColor?: keyof ThemeColors | ((theme: Theme) => string)
+  backgroundColor?: keyof ThemeColors | ((theme: Theme) => string)
+  style?: StyleProp<
+    Omit<TouchableOpacityProps['style'], 'backgroundColor' | 'borderColor'>
+  >
+  themeTransformer?: ThemeTransformer
 }
 
 export const ThemedTouchableOpacity = React.forwardRef<
   TouchableOpacity,
   ThemedTouchableOpacityProps
 >((props, ref) => {
-  const { backgroundColor: _backgroundColor, style, ...otherProps } = props
+  const {
+    backgroundColor: _backgroundColor,
+    borderColor: _borderColor,
+    style,
+    themeTransformer,
+    ...otherProps
+  } = props
 
-  const theme = useTheme()
+  const theme = useTheme({ themeTransformer })
 
   const backgroundColor = getThemeColorOrItself(theme, _backgroundColor, {
+    enableCSSVariable: true,
+  })
+
+  const borderColor = getThemeColorOrItself(theme, _borderColor, {
     enableCSSVariable: true,
   })
 
@@ -31,7 +45,11 @@ export const ThemedTouchableOpacity = React.forwardRef<
     <TouchableOpacity
       {...otherProps}
       ref={ref}
-      style={[style, { backgroundColor }]}
+      style={[style, { backgroundColor, borderColor }]}
     />
   )
 })
+
+ThemedTouchableOpacity.displayName = 'ThemedTouchableOpacity'
+
+export type ThemedTouchableOpacity = TouchableOpacity

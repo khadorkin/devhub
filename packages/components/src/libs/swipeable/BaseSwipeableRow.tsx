@@ -1,22 +1,23 @@
-import { GitHubIcon } from '@devhub/core'
 import React, { PureComponent, ReactNode } from 'react'
 import { Animated, View } from 'react-native'
 import { Swipeable } from 'react-native-gesture-handler'
+import { SwipeableProperties } from 'react-native-gesture-handler/Swipeable'
+
+import { sharedStyles } from '../../styles/shared'
 
 export type BaseActionType = 'BUTTON' | 'FULL'
 
 export interface BaseSwipeableRowAction {
-  color: string
-  icon?: GitHubIcon
+  backgroundColor: string
+  foregroundColor: string
   key: string
-  label?: string
   onPress: () => void
-  textColor?: string
   type?: BaseActionType
   width?: number
 }
 
-export interface BaseSwipeableRowProps<IAction = BaseSwipeableRowAction> {
+export interface BaseSwipeableRowProps<IAction = BaseSwipeableRowAction>
+  extends SwipeableProperties {
   children: ReactNode
   leftActions: Array<BaseSwipeableRowAction & IAction> // tslint:disable-line prefer-array-literal
   rightActions: Array<BaseSwipeableRowAction & IAction> // tslint:disable-line prefer-array-literal
@@ -36,28 +37,32 @@ export abstract class BaseSwipeableRow<
   BaseSwipeableRowProps<IAction> & P,
   BaseSwipeableRowBaseState & S
 > {
-  _swipeableRow: Swipeable | null = null
+  swipeableRef = React.createRef<Swipeable>()
+  innerViewRef = React.createRef<View>()
 
   abstract renderButtonAction: (
     action: IAction,
     params: {
-      x: number
+      dragAnimatedValue: Animated.AnimatedInterpolation
       placement: Placement
-      progress: Animated.Value
-      dragX: Animated.Value
+      progressAnimatedValue: Animated.Value | Animated.AnimatedInterpolation
+      x: number
     },
   ) => ReactNode
 
   abstract renderFullAction: (
     action: IAction,
     params: {
-      dragX: Animated.Value
+      dragAnimatedValue: Animated.AnimatedInterpolation
       placement: Placement
-      progress: Animated.Value
+      progressAnimatedValue: Animated.Value | Animated.AnimatedInterpolation
     },
   ) => ReactNode
 
-  renderLeftActions = (progress: Animated.Value, dragX: Animated.Value) => {
+  renderLeftActions = (
+    progressAnimatedValue: Animated.Value | Animated.AnimatedInterpolation,
+    dragAnimatedValue: Animated.AnimatedInterpolation,
+  ): React.ReactNode => {
     const { leftActions: actions } = this.props
 
     const fullAction = actions.find(action => action.type === 'FULL')
@@ -65,8 +70,8 @@ export abstract class BaseSwipeableRow<
 
     if (fullAction)
       return this.renderFullAction(fullAction, {
-        dragX,
-        progress,
+        dragAnimatedValue,
+        progressAnimatedValue,
         placement: 'LEFT',
       })
 
@@ -77,12 +82,12 @@ export abstract class BaseSwipeableRow<
     let x = 0
 
     return (
-      <View style={{ width, flexDirection: 'row' }}>
+      <View style={[sharedStyles.horizontal, { width }]}>
         {buttonActions.map(action => {
           x += action.width || defaultWidth
           return this.renderButtonAction(action, {
-            dragX,
-            progress,
+            dragAnimatedValue,
+            progressAnimatedValue,
             x,
             placement: 'LEFT',
           })
@@ -91,7 +96,10 @@ export abstract class BaseSwipeableRow<
     )
   }
 
-  renderRightActions = (progress: Animated.Value, dragX: Animated.Value) => {
+  renderRightActions = (
+    progressAnimatedValue: Animated.Value | Animated.AnimatedInterpolation,
+    dragAnimatedValue: Animated.AnimatedInterpolation,
+  ): React.ReactNode => {
     const { rightActions: actions } = this.props
 
     const fullAction = actions.find(action => action.type === 'FULL')
@@ -99,8 +107,8 @@ export abstract class BaseSwipeableRow<
 
     if (fullAction)
       return this.renderFullAction(fullAction, {
-        dragX,
-        progress,
+        dragAnimatedValue,
+        progressAnimatedValue,
         placement: 'RIGHT',
       })
 
@@ -111,11 +119,11 @@ export abstract class BaseSwipeableRow<
     let x = width
 
     return (
-      <View style={{ width, flexDirection: 'row' }}>
+      <View style={[sharedStyles.horizontal, { width }]}>
         {buttonActions.map(action => {
           const component = this.renderButtonAction(action, {
-            dragX,
-            progress,
+            dragAnimatedValue,
+            progressAnimatedValue,
             x,
             placement: 'RIGHT',
           })
@@ -126,12 +134,8 @@ export abstract class BaseSwipeableRow<
     )
   }
 
-  updateRef = (ref: Swipeable) => {
-    this._swipeableRow = ref
-  }
-
   close = () => {
-    if (this._swipeableRow) this._swipeableRow.close()
+    if (this.swipeableRef.current) this.swipeableRef.current!.close()
   }
 
   abstract render(): ReactNode

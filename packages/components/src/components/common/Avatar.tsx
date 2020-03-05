@@ -1,15 +1,21 @@
 import React from 'react'
-import { PixelRatio, StyleProp, View } from 'react-native'
+import { PixelRatio, View } from 'react-native'
 
 import {
+  getBaseUrlFromOtherUrl,
   getGitHubURLForRepo,
   getGitHubURLForUser,
   getUserAvatarByAvatarURL,
   getUserAvatarByEmail,
   getUserAvatarByUsername,
-  Omit,
+  getUsernameIsBot,
 } from '@devhub/core'
-import { avatarSize, radius, smallAvatarSize } from '../../styles/variables'
+import {
+  avatarSize,
+  mutedOpacity,
+  radius,
+  smallAvatarSize,
+} from '../../styles/variables'
 import { fixURL } from '../../utils/helpers/github/url'
 import {
   ThemedImageWithLoading,
@@ -25,13 +31,13 @@ export interface AvatarProps
   disableLink?: boolean
   email?: string
   hitSlop?: TouchableOpacityProps['hitSlop']
-  isBot?: boolean
   linkURL?: string
+  muted?: boolean
   repo?: string
   shape?: 'circle' | 'rounded' | 'square'
   size?: number
   small?: boolean
-  style?: StyleProp<any>
+  style?: ThemedImageWithLoadingProps['style']
   tooltip?: string
   username?: string
 }
@@ -44,8 +50,8 @@ export function Avatar(props: AvatarProps) {
     disableLink,
     email,
     hitSlop,
-    isBot: _isBot,
     linkURL,
+    muted,
     repo,
     shape,
     size: _size,
@@ -57,8 +63,13 @@ export function Avatar(props: AvatarProps) {
   } = props
 
   const finalSize = _size || (small ? smallAvatarSize : avatarSize)
-  const isBot = _isBot || Boolean(_username && _username.indexOf('[bot]') >= 0)
-  const username = isBot ? _username!.replace('[bot]', '') : _username
+  const isBot = getUsernameIsBot(_username, {
+    considerProfileBotsAsBots: false,
+  })
+  const username = (_username || '')
+    .replace('[bot]', '')
+    .replace('app/', '')
+    .split('/')[0]
 
   const avatarUrl = _avatarUrl
     ? getUserAvatarByAvatarURL(
@@ -73,19 +84,22 @@ export function Avatar(props: AvatarProps) {
     (username &&
       getUserAvatarByUsername(
         username,
-        { size: finalSize },
+        { baseURL: getBaseUrlFromOtherUrl(linkURL), size: finalSize },
         PixelRatio.getPixelSizeForLayoutSize,
       )) ||
     (email &&
       getUserAvatarByEmail(
         email,
-        { size: finalSize },
+        { baseURL: getBaseUrlFromOtherUrl(linkURL), size: finalSize },
         PixelRatio.getPixelSizeForLayoutSize,
       ))
 
   if (!uri) return null
 
-  const tooltip = _tooltip === null ? '' : _tooltip || `@${username}`
+  const tooltip =
+    !_tooltip && _tooltip !== undefined
+      ? ''
+      : _tooltip || (username && `@${username}`) || ''
 
   const linkUri = disableLink
     ? undefined
@@ -113,23 +127,22 @@ export function Avatar(props: AvatarProps) {
       <ThemedImageWithLoading
         backgroundColorFailed="#FFFFFF"
         backgroundColorLoaded="#FFFFFF"
-        backgroundColorLoading="backgroundColorLess1"
+        backgroundColorLoading="foregroundColorTransparent05"
         {...otherProps}
-        source={{ uri, width: finalSize + 1, height: finalSize + 1 }}
-        style={[
-          {
-            height: finalSize,
-            width: finalSize,
-            borderWidth: 0,
-            borderRadius:
-              !shape || shape === 'circle'
-                ? finalSize / 2
-                : shape === 'square'
-                ? 0
-                : radius,
-          },
-          style,
-        ]}
+        source={{ uri }}
+        style={{
+          height: finalSize,
+          width: finalSize,
+          borderWidth: 0,
+          borderRadius:
+            !shape || shape === 'circle'
+              ? finalSize / 2
+              : shape === 'square'
+              ? 0
+              : radius,
+          ...(muted && { opacity: mutedOpacity }),
+          ...style,
+        }}
         tooltip={tooltip}
       />
     </ConditionalWrap>

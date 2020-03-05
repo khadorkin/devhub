@@ -1,15 +1,11 @@
 import qs from 'qs'
 
-import { constants, GitHubAppType } from '@devhub/core'
+import { constants, GitHubAppType, OAuthResponseData } from '@devhub/core'
 import { Browser } from '../browser'
 import { Platform } from '../platform'
-import {
-  getUrlParamsIfMatches,
-  listenForNextUrl,
-  OAuthResponseData,
-} from './helpers'
+import { getUrlParamsIfMatches, listenForNextUrl } from './helpers'
 
-const redirectUri = 'devhub://github/oauth'
+const redirectUri = constants.APP_DEEP_LINK_URLS.github_oauth
 
 export async function executeOAuth(
   gitHubAppType: GitHubAppType | 'both',
@@ -28,15 +24,15 @@ export async function executeOAuth(
   })
 
   // console.log('[OAUTH] Opening browser...')
-  Browser.openURL(`${constants.API_BASE_URL}/github/oauth?${querystring}`)
+  Browser.openURL(`${constants.API_BASE_URL}/github/oauth?${querystring}`, {
+    native: { modalEnabled: true },
+  })
 
   const url = await listenForNextUrl()
   // console.log('[OAUTH] Received URL:', url)
 
   const params = getUrlParamsIfMatches(url, redirectUri)
   // console.log('[OAUTH] URL params:', params)
-
-  if (typeof Browser.dismiss === 'function') Browser.dismiss()
 
   if (!(params && params.app_token && params.github_token)) {
     throw new Error('Login failed: No access token received.')

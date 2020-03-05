@@ -1,8 +1,9 @@
 import { Platform as _Platform } from 'react-native'
 
 import {
-  PlataformSelectSpecifics,
-  PlatformOSType,
+  PlataformSelectSpecificsEnhanced,
+  PlatformName,
+  PlatformRealOS,
   PlatformSelectOptions,
 } from './index.shared'
 
@@ -41,28 +42,53 @@ function isElectron() {
   return false
 }
 
-function getOSName(): PlatformOSType {
+// https://stackoverflow.com/a/4819886/2228575
+function supportsTouchInput() {
+  if ('ontouchstart' in window) {
+    return true
+  }
+
+  const prefixes = ' -webkit- -moz- -o- -ms- '.split(' ')
+  const query = ['(', prefixes.join('touch-enabled),('), 'heartz', ')'].join('')
+
+  const mq = (q: string) => window.matchMedia(q).matches
+  return mq(query)
+}
+
+function getOSName(): PlatformRealOS | undefined {
   const userAgent =
-    navigator.userAgent || navigator.vendor || (window as any).opera
+    typeof navigator === 'undefined' || typeof window === 'undefined'
+      ? ''
+      : navigator.userAgent || navigator.vendor || (window as any).opera || ''
 
   if (/android/i.test(userAgent)) return 'android'
 
   if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream)
     return 'ios'
 
-  return 'web'
+  const platform =
+    typeof navigator === 'undefined'
+      ? ''
+      : `${navigator.platform || ''}`.toLowerCase().trim()
+
+  if (platform.startsWith('mac')) return 'macos'
+  if (platform.startsWith('win')) return 'windows'
+  if (platform.startsWith('linux')) return 'linux'
+
+  return undefined
 }
 
-const realOS = getOSName()
+const realOS = getOSName() || 'web'
 
 export const Platform = {
   realOS,
   ..._Platform,
   isElectron: isElectron(),
   isStandalone: (window.navigator as any).standalone,
+  OS: _Platform.OS as PlatformName,
   selectUsingRealOS<T>(
-    specifics: PlataformSelectSpecifics<T>,
-    { fallbackToWeb = false }: PlatformSelectOptions = {},
+    specifics: PlataformSelectSpecificsEnhanced<T>,
+    { fallbackToWeb = true }: PlatformSelectOptions = {},
   ) {
     const result =
       Platform.realOS in specifics
@@ -73,4 +99,5 @@ export const Platform = {
 
     return result
   },
+  supportsTouch: supportsTouchInput(),
 }

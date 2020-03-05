@@ -1,4 +1,5 @@
-import React, { ReactNode, useCallback, useEffect, useRef } from 'react'
+import { Theme, ThemeColors } from '@devhub/core'
+import React, { ReactNode, useEffect, useLayoutEffect } from 'react'
 import {
   KeyboardAvoidingView,
   StatusBar,
@@ -9,19 +10,19 @@ import {
 } from 'react-native'
 import SplashScreen from 'react-native-splash-screen'
 
-import { Theme, ThemeColors } from '@devhub/core'
 import { Platform } from '../../libs/platform'
 import { getColumnHeaderThemeColors } from '../columns/ColumnHeader'
 import { useTheme } from '../context/ThemeContext'
+import { getThemeColorOrItself } from '../themed/helpers'
 import { ThemedSafeAreaView } from '../themed/ThemedSafeAreaView'
 import { ThemedView } from '../themed/ThemedView'
 import { ConditionalWrap } from './ConditionalWrap'
 
 export interface ScreenProps {
   children?: ReactNode
-  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header'
+  enableSafeArea?: boolean
+  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header' | 'transparent'
   style?: StyleProp<ViewStyle>
-  useSafeArea?: boolean
 }
 
 const styles = StyleSheet.create({
@@ -35,32 +36,20 @@ const styles = StyleSheet.create({
 
 export function Screen(props: ScreenProps) {
   const {
+    enableSafeArea = true,
     statusBarBackgroundThemeColor,
-    useSafeArea = true,
     style,
     ...viewProps
   } = props
 
-  const initialTheme = useTheme(
-    useCallback(theme => {
-      if (cacheRef.current.theme === theme) return
+  const theme = useTheme()
 
-      cacheRef.current.theme = theme
-
-      updateStyles({
-        theme: cacheRef.current.theme,
-        statusBarBackgroundThemeColor:
-          cacheRef.current.statusBarBackgroundThemeColor,
-      })
-    }, []),
-  )
-
-  const cacheRef = useRef({
-    theme: initialTheme,
-    statusBarBackgroundThemeColor,
-  })
-  cacheRef.current.theme = initialTheme
-  cacheRef.current.statusBarBackgroundThemeColor = statusBarBackgroundThemeColor
+  useLayoutEffect(() => {
+    updateStyles({
+      statusBarBackgroundThemeColor,
+      theme,
+    })
+  }, [statusBarBackgroundThemeColor, theme])
 
   useEffect(() => {
     if (SplashScreen) {
@@ -82,7 +71,7 @@ export function Screen(props: ScreenProps) {
         })
       }
     >
-      {useSafeArea ? (
+      {enableSafeArea ? (
         <ThemedSafeAreaView
           backgroundColor="backgroundColor"
           {...viewProps}
@@ -104,18 +93,21 @@ function updateStyles({
   statusBarBackgroundThemeColor,
 }: {
   theme: Theme
-  statusBarBackgroundThemeColor?: keyof ThemeColors | 'header'
+  statusBarBackgroundThemeColor?: ScreenProps['statusBarBackgroundThemeColor']
 }) {
   StatusBar.setBarStyle(theme.isDark ? 'light-content' : 'dark-content')
 
   if (Platform.OS === 'android') {
-    const themeColor: keyof ThemeColors =
+    const themeColor: keyof ThemeColors | 'transparent' =
       statusBarBackgroundThemeColor === 'header'
-        ? getColumnHeaderThemeColors(theme.backgroundColor).normal
+        ? getColumnHeaderThemeColors().normal
         : statusBarBackgroundThemeColor || 'backgroundColor'
 
-    const color = theme[themeColor]
+    const color = getThemeColorOrItself(theme, themeColor, {
+      enableCSSVariable: false,
+    })!
 
     StatusBar.setBackgroundColor(color, false)
+    StatusBar.setTranslucent(color === 'transparent')
   }
 }

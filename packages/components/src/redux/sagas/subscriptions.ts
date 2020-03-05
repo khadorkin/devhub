@@ -1,5 +1,35 @@
-import { Response } from '@octokit/rest'
+import {
+  Column,
+  ColumnSubscription,
+  constants,
+  createIssuesOrPullRequestsCache,
+  createNotificationsCache,
+  EnhancedGitHubEvent,
+  EnhancedGitHubIssueOrPullRequest,
+  EnhancedGitHubNotification,
+  EnhancedItem,
+  enhanceIssueOrPullRequests,
+  EnhancementCache,
+  enhanceNotifications,
+  getDefaultPaginationPerPage,
+  getGitHubAPIHeadersFromHeader,
+  getIssueOrPullRequestsEnhancementMap,
+  getItemDate,
+  getNotificationsEnhancementMap,
+  getOlderOrNewerItemDate,
+  getSubscriptionOwnerOrOrg,
+  GitHubAppTokenType,
+  GitHubEvent,
+  GitHubIssueOrPullRequest,
+  GitHubNotification,
+  IssueOrPullRequestColumnSubscription,
+  mergeEventsPreservingEnhancement,
+  mergeIssuesOrPullRequestsPreservingEnhancement,
+  mergeNotificationsPreservingEnhancement,
+} from '@devhub/core'
+import { Octokit } from '@octokit/rest'
 import _ from 'lodash'
+import { AppState, InteractionManager } from 'react-native'
 import {
   actionChannel,
   all,
@@ -14,39 +44,10 @@ import {
   takeLatest,
 } from 'redux-saga/effects'
 
-import {
-  Column,
-  ColumnSubscription,
-  constants,
-  createIssuesOrPullRequestsCache,
-  createNotificationsCache,
-  enhanceIssueOrPullRequests,
-  EnhancementCache,
-  enhanceNotifications,
-  getDefaultPaginationPerPage,
-  getGitHubAPIHeadersFromHeader,
-  getIssueOrPullRequestsEnhancementMap,
-  getNotificationsEnhancementMap,
-  getOlderEventDate,
-  getOlderIssueOrPullRequestDate,
-  getOlderNotificationDate,
-  GitHubAppTokenType,
-  GitHubEvent,
-  GitHubIssueOrPullRequest,
-  GitHubNotification,
-  IssueOrPullRequestColumnSubscription,
-  mergeEventsPreservingEnhancement,
-  mergeIssuesOrPullRequestsPreservingEnhancement,
-  mergeNotificationsPreservingEnhancement,
-} from '@devhub/core'
-
+import { Browser } from '../../libs/browser'
 import { bugsnag } from '../../libs/bugsnag'
-import {
-  getActivity,
-  getIssuesOrPullRequests,
-  getNotifications,
-  octokit,
-} from '../../libs/github'
+import { emitter } from '../../libs/emitter'
+import * as github from '../../libs/github'
 import * as actions from '../actions'
 import * as selectors from '../selectors'
 import { ExtractActionFromActionCreator } from '../types/base'
@@ -55,26 +56,29 @@ let issuesOrPullRequestsCache: EnhancementCache
 let notificationsCache: EnhancementCache
 
 function* init() {
-  // yield take('LOGIN_SUCCESS')
-  yield take(['REFRESH_INSTALLATIONS_SUCCESS', 'REFRESH_INSTALLATIONS_FAILURE'])
+  const initialAction = yield take([
+    'REFRESH_INSTALLATIONS_SUCCESS',
+    'REFRESH_INSTALLATIONS_FAILURE',
+    'REFRESH_INSTALLATIONS_NOOP',
+  ])
 
   let _isFirstTime = true
   while (true) {
     const { action } = yield race({
       delay: delay(_isFirstTime ? 0 : 10 * 1000),
       action: take([
-        'LOGIN_SUCCESS',
         'LOGIN_FAILURE',
+        'LOGIN_SUCCESS',
         'LOGOUT',
-        'REPLACE_COLUMNS_AND_SUBSCRIPTIONS',
         'REFRESH_INSTALLATIONS_SUCCESS',
+        'REPLACE_COLUMNS_AND_SUBSCRIPTIONS',
       ]),
     })
 
     const forceFetchAll = !!(
-      action &&
-      (action.type === 'LOGIN_SUCCESS' ||
-        action.type === 'REFRESH_INSTALLATIONS_SUCCESS')
+      (_isFirstTime &&
+        initialAction.type === 'REFRESH_INSTALLATIONS_SUCCESS') ||
+      (action && action.type === 'REFRESH_INSTALLATIONS_SUCCESS')
     )
 
     const isFirstTime = _isFirstTime
@@ -94,40 +98,47 @@ function* init() {
     const isLogged = selectors.isLoggedSelector(state)
     if (!isLogged) continue
 
-    const subscriptions = selectors.subscriptionsArrSelector(state)
+    const subscriptions = selectors.allSubscriptionsArrSelector(state)
     if (!(subscriptions && subscriptions.length)) continue
 
-    const github = selectors.githubAPIHeadersSelector(state)
+    const githubHeaders = selectors.githubAPIHeadersSelector(state)
 
     // TODO: Eventually the number of subscriptions wont be 1x1 with the number of columns
     // Because columns will be able to have multiple subscriptions.
-    // When that happens, improve this. Limit based on number of columns or subscriptions?
-    const subscriptionsToFetch = isFirstTime
-      ? subscriptions.slice(0, constants.COLUMNS_LIMIT)
-      : subscriptions
-          .slice(0, constants.COLUMNS_LIMIT)
-          .filter(
-            s =>
-              s &&
-              s.data.loadState !== 'loading' &&
-              s.data.loadState !== 'loading_first' &&
-              (forceFetchAll ||
-                minimumRefetchTimeHasPassed(
-                  s,
-                  typeof github.pollInterval === 'number'
-                    ? github.pollInterval * 1000
-                    : undefined,
-                )),
-          )
+    // When that happens, improve this COLUMNS_LIMIT.
+    // Limit based on number of columns or subscriptions?
+    const subscriptionsToFetch = subscriptions
+      .slice(0, constants.COLUMNS_LIMIT)
+      .filter(
+        s =>
+          s &&
+          !(
+            (s.data.loadState === 'loading' ||
+              s.data.loadState === 'loading_first') &&
+            !minimumRefetchTimeHasPassed(s, 1 * 60 * 1000)
+          ) &&
+          (forceFetchAll ||
+            minimumRefetchTimeHasPassed(
+              s,
+              typeof githubHeaders.pollInterval === 'number'
+                ? githubHeaders.pollInterval * 1000
+                : undefined,
+            )),
+      )
     if (!(subscriptionsToFetch && subscriptionsToFetch.length)) continue
 
     yield all(
       subscriptionsToFetch.map(function*(subscription) {
         if (!subscription) return
 
+        const lastFetchedAt = selectors.subscriptionLastFetchedAtSelector(
+          state,
+          subscription.id,
+        )
+
         const fiveMinutes = 1000 * 60 * 5
-        const timeDiff = subscription.data.lastFetchedAt
-          ? Date.now() - new Date(subscription.data.lastFetchedAt).valueOf()
+        const timeDiff = lastFetchedAt
+          ? Date.now() - new Date(lastFetchedAt).valueOf()
           : undefined
 
         if (
@@ -150,12 +161,20 @@ function* init() {
           return
         }
 
+        const replaceAllItems = isFirstTime
+
         return yield put(
           actions.fetchSubscriptionRequest({
             subscriptionType: subscription.type,
             subscriptionId: subscription.id,
-            params: { page: 1 },
-            replaceAllItems: isFirstTime,
+            params: {
+              page: 1,
+              since:
+                replaceAllItems || subscription.type === 'notifications'
+                  ? undefined
+                  : subscription.data.newestItemDate,
+            },
+            replaceAllItems,
           }),
         )
       }),
@@ -164,6 +183,9 @@ function* init() {
 }
 
 function* cleanupSubscriptions() {
+  if (AppState.currentState === 'active')
+    yield call(InteractionManager.runAfterInteractions)
+
   const allSubscriptionIds: string[] = yield select(
     selectors.subscriptionIdsSelector,
   )
@@ -190,11 +212,47 @@ function* cleanupSubscriptions() {
   yield put(actions.deleteColumnSubscriptions(unusedSubscriptionIds))
 }
 
+function* handleOpenItem(
+  action: ExtractActionFromActionCreator<typeof actions.openItem>,
+) {
+  if (action.payload.link) Browser.openURLOnNewTab(action.payload.link)
+
+  if (AppState.currentState === 'active')
+    yield call(InteractionManager.runAfterInteractions)
+
+  if (action.payload.itemNodeIdOrId) {
+    yield put(
+      actions.markItemsAsReadOrUnread({
+        type: action.payload.columnType,
+        itemNodeIdOrIds: [action.payload.itemNodeIdOrId],
+        localOnly: true,
+        unread: false,
+      }),
+    )
+  }
+
+  if (action.payload.columnId) {
+    emitter.emit('FOCUS_ON_COLUMN', {
+      columnId: action.payload.columnId,
+      scrollTo: true,
+    })
+
+    emitter.emit('FOCUS_ON_COLUMN_ITEM', {
+      columnId: action.payload.columnId,
+      itemNodeIdOrId: action.payload.itemNodeIdOrId,
+      scrollTo: true,
+    })
+  }
+}
+
 function* onAddColumn(
   action: ExtractActionFromActionCreator<
     typeof actions.addColumnAndSubscriptions
   >,
 ) {
+  if (AppState.currentState === 'active')
+    yield call(InteractionManager.runAfterInteractions)
+
   const state = yield select()
 
   const column = selectors.columnSelector(state, action.payload.column.id)
@@ -216,7 +274,7 @@ function* onFetchColumnSubscriptions(
 ) {
   const state = yield select()
 
-  const columnSubscriptions = selectors.columnSubscriptionsSelector(
+  const columnSubscriptions = selectors.createColumnSubscriptionsSelector()(
     state,
     action.payload.columnId,
   )
@@ -263,33 +321,33 @@ function* onFetchRequest(
     subscriptionType,
   } = action.payload
 
+  const subscriptionsDataSelector = selectors.createSubscriptionsDataSelector()
+
   const subscription = selectors.subscriptionSelector(state, subscriptionId)
 
-  const owner =
-    (subscription &&
-      subscription.params &&
-      (('owner' in subscription.params && subscription.params.owner) ||
-        ('org' in subscription.params && subscription.params.org))) ||
-    undefined
+  const owner = getSubscriptionOwnerOrOrg(subscription)
 
+  const privateToken = selectors.getPrivateTokenByOwnerSelector(state, owner)
   const installationToken = selectors.installationTokenByOwnerSelector(
     state,
     owner,
   )
-  const githubOAuthToken = selectors.githubOAuthTokenSelector(state)!
-  const githubAppToken = selectors.githubAppTokenSelector(state)
+  const githubOAuthOrPersonalToken = selectors.githubTokenSelector(state)!
+  const githubAppTokenDetails = selectors.githubAppTokenDetailsSelector(state)
+  const loggedUsername = selectors.currentGitHubUsernameSelector(state)!
 
   const githubToken =
     (subscription &&
       (subscription.type === 'activity' ||
         subscription.type === 'issue_or_pr') &&
-      installationToken) ||
-    githubOAuthToken ||
-    githubAppToken
+      privateToken) ||
+    githubOAuthOrPersonalToken ||
+    (githubAppTokenDetails && githubAppTokenDetails.token)
 
   const appTokenType: GitHubAppTokenType =
     (githubToken === installationToken && 'app-installation') ||
-    (githubToken === githubAppToken && 'app-user-to-server') ||
+    (githubToken === (githubAppTokenDetails && githubAppTokenDetails.token) &&
+      'app-user-to-server') ||
     'oauth'
 
   const page = Math.max(1, payloadParams.page || 1)
@@ -310,6 +368,7 @@ function* onFetchRequest(
     page,
     per_page: perPage,
   }
+
   const subscriptionParams = subscription && subscription.params
 
   try {
@@ -320,13 +379,15 @@ function* onFetchRequest(
     let headers
     if (subscription && subscription.type === 'notifications') {
       const response = yield call(
-        getNotifications,
+        github.getNotifications,
         { ...requestParams, ...subscriptionParams },
-        { subscriptionId },
+        { githubToken, subscriptionId },
       )
       headers = (response && response.headers) || {}
 
-      const prevItems = subscription.data.items || []
+      const prevItems = subscriptionsDataSelector(state, [
+        subscription.id,
+      ]) as EnhancedGitHubNotification[]
       const newItems = response.data as GitHubNotification[]
       const mergedItems = mergeNotificationsPreservingEnhancement(
         newItems,
@@ -334,8 +395,16 @@ function* onFetchRequest(
         { dropPrevItems: replaceAllItems },
       )
 
-      const olderDateFromThisResponse = getOlderNotificationDate(newItems)
-      const olderItemDate = getOlderNotificationDate(mergedItems)
+      const olderDateFromThisResponse = getOlderOrNewerItemDate(
+        'notifications',
+        'older',
+        newItems,
+      )
+      const olderItemDate = getOlderOrNewerItemDate(
+        'notifications',
+        'older',
+        mergedItems,
+      )
 
       if (!notificationsCache) {
         notificationsCache = createNotificationsCache(prevItems)
@@ -346,16 +415,13 @@ function* onFetchRequest(
         mergedItems,
         {
           cache: notificationsCache,
-          getGitHubInstallationTokenForRepo: (
+          getGitHubPrivateTokenForRepo: (
             ownerName: string | undefined,
             repoName: string | undefined,
           ) =>
-            selectors.installationTokenByRepoSelector(
-              state,
-              ownerName,
-              repoName,
-            ),
-          githubOAuthToken,
+            selectors.getPrivateTokenByRepoSelector(state, ownerName, repoName),
+          githubLogin: loggedUsername,
+          githubToken,
         },
       )
 
@@ -382,14 +448,16 @@ function* onFetchRequest(
           : undefined
     } else if (subscription && subscription.type === 'activity') {
       const response = yield call(
-        getActivity,
+        github.getActivity,
         subscription.subtype,
         { ...requestParams, ...subscriptionParams },
-        { subscriptionId, githubToken },
+        { githubToken, subscriptionId },
       )
       headers = (response && response.headers) || {}
 
-      const prevItems = subscription.data.items || []
+      const prevItems = subscriptionsDataSelector(state, [
+        subscription.id,
+      ]) as EnhancedGitHubEvent[]
       const newItems = (response.data || []) as GitHubEvent[]
       const mergedItems = mergeEventsPreservingEnhancement(
         newItems,
@@ -397,8 +465,16 @@ function* onFetchRequest(
         { dropPrevItems: replaceAllItems },
       )
 
-      const olderDateFromThisResponse = getOlderEventDate(newItems)
-      const olderItemDate = getOlderEventDate(mergedItems)
+      const olderDateFromThisResponse = getOlderOrNewerItemDate(
+        'activity',
+        'older',
+        newItems,
+      )
+      const olderItemDate = getOlderOrNewerItemDate(
+        'activity',
+        'older',
+        mergedItems,
+      )
 
       data = newItems
 
@@ -417,15 +493,17 @@ function* onFetchRequest(
           : undefined
     } else if (subscription && subscription.type === 'issue_or_pr') {
       const response = yield call(
-        getIssuesOrPullRequests,
+        github.getIssuesOrPullRequests,
         subscription.subtype,
         subscriptionParams as IssueOrPullRequestColumnSubscription['params'],
         requestParams,
-        { subscriptionId, githubToken },
+        { githubToken, subscriptionId },
       )
       headers = (response && response.headers) || {}
 
-      const prevItems = subscription.data.items || []
+      const prevItems = subscriptionsDataSelector(state, [
+        subscription.id,
+      ]) as EnhancedGitHubIssueOrPullRequest[]
       const newItems = (response.data || []) as GitHubIssueOrPullRequest[]
       const mergedItems = mergeIssuesOrPullRequestsPreservingEnhancement(
         newItems,
@@ -433,8 +511,16 @@ function* onFetchRequest(
         { dropPrevItems: replaceAllItems },
       )
 
-      const olderDateFromThisResponse = getOlderIssueOrPullRequestDate(newItems)
-      const olderItemDate = getOlderIssueOrPullRequestDate(mergedItems)
+      const olderDateFromThisResponse = getOlderOrNewerItemDate(
+        'issue_or_pr',
+        'older',
+        newItems,
+      )
+      const olderItemDate = getOlderOrNewerItemDate(
+        'issue_or_pr',
+        'older',
+        mergedItems,
+      )
 
       if (!issuesOrPullRequestsCache) {
         issuesOrPullRequestsCache = createIssuesOrPullRequestsCache(prevItems)
@@ -445,16 +531,12 @@ function* onFetchRequest(
         mergedItems,
         {
           cache: issuesOrPullRequestsCache,
-          getGitHubInstallationTokenForRepo: (
+          getGitHubPrivateTokenForRepo: (
             ownerName: string | undefined,
             repoName: string | undefined,
           ) =>
-            selectors.installationTokenByRepoSelector(
-              state,
-              ownerName,
-              repoName,
-            ),
-          githubOAuthToken,
+            selectors.getPrivateTokenByRepoSelector(state, ownerName, repoName),
+          githubToken,
         },
       )
 
@@ -486,7 +568,22 @@ function* onFetchRequest(
       )
     }
 
+    if (data && requestParams.since) {
+      data = (data as EnhancedItem[]).filter(
+        item =>
+          !!(
+            item &&
+            requestParams.since &&
+            getItemDate(item) &&
+            getItemDate(item)! > requestParams.since
+          ),
+      )
+    }
+
     const githubAPIHeaders = getGitHubAPIHeadersFromHeader(headers)
+
+    if (AppState.currentState === 'active')
+      yield call(InteractionManager.runAfterInteractions)
 
     yield put(
       actions.fetchSubscriptionSuccess({
@@ -495,7 +592,7 @@ function* onFetchRequest(
         data,
         canFetchMore,
         replaceAllItems,
-        github: { appTokenType, headers: githubAPIHeaders },
+        github: { appTokenType, loggedUsername, headers: githubAPIHeaders },
       }),
     )
   } catch (error) {
@@ -549,7 +646,7 @@ function* onMarkItemsAsReadOrUnread(
     typeof actions.markItemsAsReadOrUnread
   >,
 ) {
-  const { itemIds, localOnly, type, unread } = action.payload
+  const { itemNodeIdOrIds, localOnly, type, unread } = action.payload
 
   if (localOnly) return
 
@@ -558,11 +655,17 @@ function* onMarkItemsAsReadOrUnread(
   if (unread) return
 
   if (type !== 'notifications') return
-  if (!(itemIds && itemIds.length)) return
+  if (!(itemNodeIdOrIds && itemNodeIdOrIds.length)) return
+
+  const state = yield select()
+  const githubToken = selectors.githubTokenSelector(state)
+  if (!githubToken) return
+
+  const octokit = github.getOctokitForToken(githubToken)
 
   const results = yield all(
-    itemIds.map(function*(itemId, index) {
-      const threadId = itemId && parseInt(`${itemId}`, 10)
+    itemNodeIdOrIds.map(function*(itemNodeIdOrId, index) {
+      const threadId = itemNodeIdOrId && parseInt(`${itemNodeIdOrId}`, 10)
       if (!threadId) return
 
       if (index > 0) yield delay(100)
@@ -579,10 +682,11 @@ function* onMarkItemsAsReadOrUnread(
   )
 
   const failedIds: string[] = results
-    .map((result: Response<any>, index: number) =>
-      result && result.status >= 200 && result.status < 400
+    .map((result: Octokit.AnyResponse, index: number) =>
+      result &&
+      ((result.status >= 200 && result.status < 400) || result.status === 404)
         ? undefined
-        : action.payload.itemIds[index],
+        : action.payload.itemNodeIdOrIds[index],
     )
     .filter(Boolean)
 
@@ -590,7 +694,7 @@ function* onMarkItemsAsReadOrUnread(
     yield put(
       actions.markItemsAsReadOrUnread({
         localOnly: true,
-        itemIds: failedIds,
+        itemNodeIdOrIds: failedIds,
         type: action.payload.type,
         unread: !action.payload.unread,
       }),
@@ -610,6 +714,12 @@ function* onMarkAllNotificationsAsReadOrUnread(
   // GitHub api does not support marking as unread yet :(
   // @see https://github.com/octokit/rest.js/issues/1232
   if (unread) return
+
+  const state = yield select()
+  const githubToken = selectors.githubTokenSelector(state)
+  if (!githubToken) return
+
+  const octokit = github.getOctokitForToken(githubToken)
 
   try {
     yield octokit.activity.markAsRead({})
@@ -638,6 +748,12 @@ function* onMarkRepoNotificationsAsReadOrUnread(
   // GitHub api does not support marking as unread yet :(
   // @see https://github.com/octokit/rest.js/issues/1232
   if (unread) return
+
+  const state = yield select()
+  const githubToken = selectors.githubTokenSelector(state)
+  if (!githubToken) return
+
+  const octokit = github.getOctokitForToken(githubToken)
 
   try {
     if (!(owner && repo))
@@ -669,6 +785,7 @@ export function* subscriptionsSagas() {
     yield takeEvery('ADD_COLUMN_AND_SUBSCRIPTIONS', onAddColumn),
     yield takeLatest(['LOGOUT', 'LOGIN_FAILURE'], onLogout),
     yield takeEvery('DELETE_COLUMN', cleanupSubscriptions),
+    yield takeEvery('OPEN_ITEM', handleOpenItem),
     yield takeLatest('REMOVE_SUBSCRIPTION_FROM_COLUMN', cleanupSubscriptions),
     yield takeLatest('REPLACE_COLUMNS_AND_SUBSCRIPTIONS', cleanupSubscriptions),
     yield takeEvery('FETCH_COLUMN_SUBSCRIPTIONS', onFetchColumnSubscriptions),
@@ -685,21 +802,33 @@ export function* subscriptionsSagas() {
   ])
 }
 
-const minute = 1 * 60 * 1000
-const minPollingInterval = 2 * minute
+const minute = 1000 * 60 * 1
 function minimumRefetchTimeHasPassed(
   subscription: ColumnSubscription,
-  _interval = minPollingInterval,
+  interval = 0,
 ) {
   if (!subscription) return false
 
-  const interval =
-    typeof _interval === 'number' && _interval > 0
-      ? Math.min(Math.max(minPollingInterval, _interval), 60 * minute)
+  const minPollingInterval =
+    subscription.type === 'issue_or_pr'
+      ? AppState.currentState === 'active'
+        ? 2 * minute
+        : 5 * minute
       : minute
 
+  const fixedInterval =
+    typeof interval === 'number' && interval >= 0
+      ? Math.min(Math.max(minPollingInterval, interval), 60 * minute)
+      : minPollingInterval
+
+  const lastFetchedAt = _.max([
+    subscription.data.lastFetchRequestAt,
+    subscription.data.lastFetchFailureAt,
+    subscription.data.lastFetchSuccessAt,
+  ])
+
   return (
-    !subscription.data.lastFetchedAt ||
-    new Date(subscription.data.lastFetchedAt).valueOf() <= Date.now() - interval
+    !lastFetchedAt ||
+    new Date(lastFetchedAt).valueOf() <= Date.now() - fixedInterval
   )
 }

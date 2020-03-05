@@ -1,15 +1,14 @@
 import React, { useRef } from 'react'
 import { View } from 'react-native'
 
-import { isNight, Theme } from '@devhub/core'
+import { darkThemesArr, isNight, lightThemesArr, Theme } from '@devhub/core'
 import { useReduxAction } from '../../hooks/use-redux-action'
 import { useReduxState } from '../../hooks/use-redux-state'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
-import { darkThemesArr, lightThemesArr } from '../../styles/themes'
-import { defaultTheme } from '../../styles/utils'
 import { contentPadding } from '../../styles/variables'
+import { vibrateHapticFeedback } from '../../utils/helpers/shared'
 import { Checkbox } from '../common/Checkbox'
 import { H3 } from '../common/H3'
 import { Spacer } from '../common/Spacer'
@@ -18,12 +17,10 @@ import { Switch } from '../common/Switch'
 import { useTheme } from '../context/ThemeContext'
 
 export const ThemePreference = React.memo(() => {
-  const lastThemeId = useRef(defaultTheme.id)
+  const appTheme = useTheme()
 
-  useTheme(theme => {
-    if (theme.id === 'auto') return
-    lastThemeId.current = theme.id
-  })
+  const lastThemeId = useRef(appTheme.id)
+  if (appTheme.id !== 'auto') lastThemeId.current = appTheme.id
 
   const currentThemeId = useReduxState(selectors.themePairSelector).id
 
@@ -50,7 +47,6 @@ export const ThemePreference = React.memo(() => {
 
     return (
       <Checkbox
-        analyticsLabel={undefined}
         key={`theme-item-checkbox-${theme.id}`}
         checked={selected ? (currentThemeId === 'auto' ? null : true) : false}
         circle
@@ -61,7 +57,7 @@ export const ThemePreference = React.memo(() => {
         label={theme.displayName}
         onChange={checked => {
           if (
-            checked === true ||
+            typeof checked === 'boolean' ||
             (currentThemeId === 'auto' && checked === null)
           ) {
             if (currentThemeId === 'auto' && theme.isDark === isNight()) {
@@ -71,6 +67,8 @@ export const ThemePreference = React.memo(() => {
               })
               return
             }
+
+            vibrateHapticFeedback()
 
             setTheme({
               id: theme.id,
@@ -102,11 +100,11 @@ export const ThemePreference = React.memo(() => {
         <Spacer height={contentPadding} />
 
         <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
+          style={[
+            sharedStyles.horizontal,
+            sharedStyles.alignItemsCenter,
+            sharedStyles.justifyContentSpaceBetween,
+          ]}
         >
           <H3>Auto toggle on day/night</H3>
           <Switch
@@ -123,3 +121,5 @@ export const ThemePreference = React.memo(() => {
     </View>
   )
 })
+
+ThemePreference.displayName = 'ThemePreference'

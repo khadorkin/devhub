@@ -1,7 +1,12 @@
+import { constants } from '@devhub/core'
 import qs from 'qs'
+import { ReactNode } from 'react'
 import { findDOMNode } from 'react-dom'
 
-import { constants } from '@devhub/core'
+import {
+  AppLayoutProviderState,
+  getAppLayout,
+} from '../../components/context/LayoutContext'
 import { Browser } from '../../libs/browser'
 import { Linking } from '../../libs/linking'
 import { Platform } from '../../libs/platform'
@@ -32,8 +37,9 @@ export function tryFocus(ref: any) {
 
   if (node && node.focus) {
     if (!(node.tabIndex >= 0)) node.tabIndex = -1
-    node.focus()
-    return true
+
+    node.focus({ preventScroll: true })
+    return node
   }
 
   return false
@@ -51,7 +57,7 @@ export function getGitHubAppInstallUri(
   const redirectUri =
     options.redirectUri ||
     (Platform.OS === 'ios' || Platform.OS === 'android' || Platform.isElectron
-      ? 'devhub://'
+      ? `${constants.APP_DEEP_LINK_SCHEMA}://`
       : Platform.OS === 'web'
       ? window.location.origin
       : '')
@@ -70,7 +76,9 @@ export function getGitHubAppInstallUri(
   return `${baseUri}${querystring ? `?${querystring}` : ''}`
 }
 
-export async function openAppStore() {
+export async function openAppStore({
+  showReviewModal,
+}: { showReviewModal?: boolean } = {}) {
   try {
     if (Platform.realOS === 'android') {
       let storeUrl = `market://details?id=${constants.GOOGLEPLAY_ID}`
@@ -81,18 +89,14 @@ export async function openAppStore() {
         return true
       }
 
-      storeUrl = `https://play.google.com/store/apps/details?id=${
-        constants.GOOGLEPLAY_ID
-      }`
+      storeUrl = `https://play.google.com/store/apps/details?id=${constants.GOOGLEPLAY_ID}`
       if (__DEV__) console.log(`Requested to open Play Store: ${storeUrl}`) // tslint:disable-line no-console
       await Browser.openURL(storeUrl)
       return true
     }
 
     if (Platform.realOS === 'ios') {
-      let storeUrl = `itms-apps://itunes.apple.com/app/id${
-        constants.APPSTORE_ID
-      }`
+      let storeUrl = `itms-apps://itunes.apple.com/app/id${constants.APPSTORE_ID}`
 
       if (Platform.OS === 'ios' && (await Linking.canOpenURL(storeUrl))) {
         if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // tslint:disable-line no-console
@@ -100,9 +104,9 @@ export async function openAppStore() {
         return true
       }
 
-      storeUrl = `https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewContentsUserReviews?id=${
-        constants.APPSTORE_ID
-      }&pageNumber=0&sortOrdering=2&type=Purple+Software&mt=8`
+      storeUrl = showReviewModal
+        ? `https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewContentsUserReviews?id=${constants.APPSTORE_ID}&pageNumber=0&sortOrdering=2&mt=8`
+        : `https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewSoftware?id=${constants.APPSTORE_ID}&pageNumber=0&sortOrdering=2&mt=8`
       if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // tslint:disable-line no-console
       await Browser.openURL(storeUrl)
       return true
@@ -118,7 +122,7 @@ export async function openAppStore() {
 export function genericParseText<T extends string>(
   text: string,
   pattern: RegExp,
-  fn: (match: T) => React.ReactNode,
+  fn: (match: T) => ReactNode,
 ) {
   if (!(text && typeof text === 'string')) return [text].filter(Boolean)
 
@@ -131,6 +135,30 @@ export function genericParseText<T extends string>(
 
       return result.concat([item, fn(matches[index])].filter(Boolean))
     },
-    [] as React.ReactNode[],
+    [] as ReactNode[],
   )
+}
+
+export function isBigEnoughForMultiColumnView(
+  sizename?: AppLayoutProviderState['sizename'],
+) {
+  return (sizename || getAppLayout().sizename) >= '2-medium'
+}
+
+export function vibrateHapticFeedback() {
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    const ReactNativeHapticFeedback = require('react-native-haptic-feedback')
+      .default
+
+    ReactNativeHapticFeedback.trigger('selection', {
+      enableVibrateFallback: true,
+      ignoreAndroidSystemSettings: true,
+    })
+  } else if (
+    Platform.OS === 'web' &&
+    window.navigator &&
+    window.navigator.vibrate
+  ) {
+    window.navigator.vibrate(50)
+  }
 }

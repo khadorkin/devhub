@@ -1,43 +1,55 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 
-import { getColumnHeaderDetails, Omit } from '@devhub/core'
+import { getColumnHeaderDetails } from '@devhub/core'
 import {
   EventCardsContainer,
   EventCardsContainerProps,
 } from '../../containers/EventCardsContainer'
-import { ColumnRenderer } from './ColumnRenderer'
+import { ColumnRenderer, ColumnRendererProps } from './ColumnRenderer'
 
 export interface EventColumnProps
-  extends Omit<
-    EventCardsContainerProps,
-    'cardViewMode' | 'enableCompactLabels' | 'repoIsKnown'
-  > {
+  extends Omit<EventCardsContainerProps, 'ownerIsKnown' | 'repoIsKnown'> {
   columnIndex: number
-  disableColumnOptions?: boolean
   headerDetails: ReturnType<typeof getColumnHeaderDetails>
   pagingEnabled?: boolean
 }
 
 export const EventColumn = React.memo((props: EventColumnProps) => {
   const {
-    column,
+    columnId,
     columnIndex,
-    disableColumnOptions,
     headerDetails,
     pagingEnabled,
+    pointerEvents,
+    swipeable,
   } = props
+
+  const Children = useMemo<ColumnRendererProps['children']>(
+    () => (
+      <EventCardsContainer
+        key={`event-cards-container-${columnId}`}
+        columnId={columnId}
+        pointerEvents={pointerEvents}
+        swipeable={swipeable}
+      />
+    ),
+    [columnId, columnIndex, pointerEvents, swipeable],
+  )
 
   if (!headerDetails) return null
 
   return (
     <ColumnRenderer
-      key={`event-column-${column.id}-inner`}
-      avatarRepo={headerDetails.avatarProps && headerDetails.avatarProps.repo}
-      avatarUsername={
-        headerDetails.avatarProps && headerDetails.avatarProps.username
+      key={`event-column-${columnId}-inner`}
+      avatarImageURL={
+        headerDetails.avatarProps && headerDetails.avatarProps.imageURL
       }
-      column={column}
-      disableColumnOptions={disableColumnOptions}
+      avatarLinkURL={
+        headerDetails.avatarProps && headerDetails.avatarProps.linkURL
+      }
+      columnId={columnId}
+      columnType="activity"
+      columnIndex={columnIndex}
       icon={headerDetails.icon}
       owner={headerDetails.owner}
       pagingEnabled={pagingEnabled}
@@ -46,16 +58,9 @@ export const EventColumn = React.memo((props: EventColumnProps) => {
       subtitle={headerDetails.subtitle}
       title={headerDetails.title}
     >
-      {({ cardViewMode, enableCompactLabels }) => (
-        <EventCardsContainer
-          {...props}
-          key={`event-cards-container-${column.id}`}
-          cardViewMode={cardViewMode}
-          columnIndex={columnIndex}
-          enableCompactLabels={enableCompactLabels}
-          repoIsKnown={headerDetails.repoIsKnown}
-        />
-      )}
+      {Children}
     </ColumnRenderer>
   )
 })
+
+EventColumn.displayName = 'EventColumn'

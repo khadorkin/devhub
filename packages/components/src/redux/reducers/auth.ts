@@ -1,7 +1,8 @@
+import { User } from '@devhub/core'
+import immer from 'immer'
 import _ from 'lodash'
 import { REHYDRATE } from 'redux-persist'
 
-import { User } from '@devhub/core'
 import { Reducer } from '../types'
 
 export interface AuthError {
@@ -16,8 +17,16 @@ export interface State {
   error: AuthError | null
   isDeletingAccount: boolean
   isLoggingIn: boolean
-  loginCount: number
-  user: Pick<User, '_id' | 'createdAt' | 'lastLoginAt' | 'updatedAt'> | null
+  user: Pick<
+    User,
+    | '_id'
+    | 'plan'
+    | 'lastLoginAt'
+    | 'freeTrialStartAt'
+    | 'freeTrialEndAt'
+    | 'createdAt'
+    | 'updatedAt'
+  > | null
 }
 
 const initialState: State = {
@@ -25,17 +34,21 @@ const initialState: State = {
   error: null,
   isDeletingAccount: false,
   isLoggingIn: false,
-  loginCount: 0,
   user: null,
 }
 
 export const authReducer: Reducer<State> = (state = initialState, action) => {
   switch (action.type) {
-    case REHYDRATE as any:
+    case REHYDRATE as any: {
+      const { err, payload } = action as any
+
+      const auth: State = err ? state : payload && payload.auth
+
       return {
-        ...(action.payload && (action.payload as any).auth),
+        ...auth,
         ..._.pick(initialState, ['error', 'isDeletingAccount', 'isLoggingIn']),
       }
+    }
 
     case 'LOGIN_REQUEST':
       return {
@@ -44,31 +57,55 @@ export const authReducer: Reducer<State> = (state = initialState, action) => {
         error: null,
         isDeletingAccount: false,
         isLoggingIn: true,
-        loginCount: state.loginCount,
         user: state.user,
       }
 
     case 'LOGIN_SUCCESS':
-      return {
-        appToken: action.payload.appToken || state.appToken,
-        error: null,
-        isDeletingAccount: false,
-        isLoggingIn: false,
-        loginCount: (state.loginCount || 0) + 1,
-        user: action.payload.user && {
-          _id: action.payload.user._id,
-          lastLoginAt:
-            action.payload.user.lastLoginAt || new Date().toISOString(),
-          createdAt: action.payload.user.createdAt,
-          updatedAt: action.payload.user.updatedAt,
-        },
-      }
+      return immer(state, draft => {
+        draft.appToken = action.payload.appToken || state.appToken
+        draft.error = null
+        draft.isDeletingAccount = false
+        draft.isLoggingIn = false
+
+        if (action.payload.user) {
+          draft.user = draft.user || ({} as any)
+          draft.user!._id = action.payload.user._id
+          draft.user!.freeTrialStartAt = action.payload.user.freeTrialStartAt
+          draft.user!.freeTrialEndAt = action.payload.user.freeTrialEndAt
+
+          if (action.payload.user.plan) {
+            if (
+              !draft.user!.plan ||
+              JSON.stringify(draft.user!.plan) !==
+                JSON.stringify(action.payload.user.plan)
+            ) {
+              draft.user!.plan = action.payload.user.plan
+            }
+          }
+
+          draft.user!.lastLoginAt =
+            action.payload.user.lastLoginAt || new Date().toISOString()
+          draft.user!.createdAt = action.payload.user.createdAt
+          draft.user!.updatedAt = action.payload.user.updatedAt
+        }
+      })
 
     case 'LOGIN_FAILURE':
       return {
         ...initialState,
         error: action.error,
       }
+
+    case 'UPDATE_USER_DATA': {
+      return immer(state, draft => {
+        draft.user = draft.user || ({} as any)
+
+        if (action.payload.plan) {
+          draft.user!.plan = draft.user!.plan || ({} as any)
+          Object.assign(draft.user!.plan, action.payload.plan)
+        }
+      })
+    }
 
     case 'DELETE_ACCOUNT_REQUEST':
       return {

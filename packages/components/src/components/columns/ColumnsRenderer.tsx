@@ -1,105 +1,56 @@
-import React, { useCallback } from 'react'
-import { Dimensions } from 'react-native'
+import React, { useMemo } from 'react'
+import { View } from 'react-native'
 
-import { constants } from '@devhub/core'
-import { ColumnContainer } from '../../containers/ColumnContainer'
 import { useAppViewMode } from '../../hooks/use-app-view-mode'
 import { useReduxState } from '../../hooks/use-redux-state'
-import { emitter } from '../../libs/emitter'
-import { SafeAreaView } from '../../libs/safe-area-view'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
-import { columnHeaderHeight, sidebarSize } from '../../styles/variables'
 import { useColumnFilters } from '../context/ColumnFiltersContext'
-import { useFocusedColumn } from '../context/ColumnFocusContext'
-import { useAppLayout } from '../context/LayoutContext'
-import { ViewMeasurer } from '../render-props/ViewMeasure'
-import { ColumnOptionsRenderer } from './ColumnOptionsRenderer'
+import { ColumnFiltersRenderer } from './ColumnFiltersRenderer'
 import { Columns } from './Columns'
-import { NoColumns } from './NoColumns'
-import { NoFocusedColumn } from './NoFocusedColumn'
 
 export interface ColumnsRendererProps {}
 
 export function ColumnsRenderer() {
-  const { appOrientation, sizename } = useAppLayout()
   const { appViewMode } = useAppViewMode()
-  const { focusedColumnId } = useFocusedColumn()
-  const {
-    enableSharedFiltersView,
-    fixedWidth,
-    inlineMode,
-    isSharedFiltersOpened,
-  } = useColumnFilters()
-  const columnIds = useReduxState(selectors.columnIdsSelector)
 
-  const closeSharedFiltersView = useCallback(
-    () => emitter.emit('TOGGLE_COLUMN_FILTERS', { columnId: focusedColumnId! }),
-    [focusedColumnId],
+  const { enableSharedFiltersView, inlineMode } = useColumnFilters()
+
+  const hasColumns = useReduxState(
+    state => !!selectors.columnIdsSelector(state).length,
   )
 
-  if (!columnIds.length) {
-    return <NoColumns fullWidth />
-  }
+  // if (appViewMode === 'single-column' && !focusedColumnId && columnIds.length) {
+  //   return <NoFocusedColumn />
+  // }
 
-  if (appViewMode === 'single-column' || sizename === '1-small') {
-    if (!focusedColumnId) {
-      return <NoFocusedColumn />
-    }
+  const ColumnsComponent = useMemo(() => <Columns key="columns" />, [])
 
-    const defaultContainerHeight =
-      appOrientation === 'portrait'
-        ? Dimensions.get('window').height - columnHeaderHeight - sidebarSize - 2
-        : Dimensions.get('window').height - columnHeaderHeight - 1
+  const FiltersComponent = useMemo(
+    () =>
+      appViewMode === 'single-column' &&
+      !!enableSharedFiltersView &&
+      !!hasColumns && (
+        <ColumnFiltersRenderer
+          key="column-options-renderer"
+          columnId="focused"
+          fixedPosition="right"
+          forceOpenAll={inlineMode}
+          header="header"
+          type="shared"
+        />
+      ),
+    [
+      appViewMode === 'single-column' &&
+        !!enableSharedFiltersView &&
+        !!hasColumns,
+    ],
+  )
 
-    return (
-      <SafeAreaView style={sharedStyles.flex}>
-        <ViewMeasurer
-          key="columns-renderer-view-measurer"
-          initialResult={defaultContainerHeight}
-          mapper={({ height }) => height}
-          style={[sharedStyles.flex, sharedStyles.horizontal]}
-        >
-          {(containerHeight: number) => (
-            <>
-              {!!enableSharedFiltersView && (
-                <ColumnOptionsRenderer
-                  key="column-options-renderer"
-                  columnId={focusedColumnId}
-                  containerHeight={containerHeight}
-                  fixedPosition="right"
-                  fixedWidth={fixedWidth}
-                  forceOpenAll
-                  inlineMode={inlineMode}
-                  isOpen={isSharedFiltersOpened}
-                  renderHeader={inlineMode ? 'yes' : 'spacing-only'}
-                  startWithFiltersExpanded
-                  close={closeSharedFiltersView}
-                />
-              )}
-
-              {appViewMode === 'single-column' ? (
-                <ColumnContainer
-                  key="single-column-container"
-                  columnId={focusedColumnId}
-                  disableColumnOptions={inlineMode}
-                  pointerEvents={
-                    isSharedFiltersOpened && !inlineMode ? 'none' : undefined
-                  }
-                  swipeable={!constants.DISABLE_SWIPEABLE_CARDS}
-                />
-              ) : (
-                <Columns
-                  key="columns"
-                  pointerEvents={isSharedFiltersOpened ? 'none' : undefined}
-                />
-              )}
-            </>
-          )}
-        </ViewMeasurer>
-      </SafeAreaView>
-    )
-  }
-
-  return <Columns key="columns" />
+  return (
+    <View style={[sharedStyles.flex, sharedStyles.horizontal]}>
+      {FiltersComponent}
+      {ColumnsComponent}
+    </View>
+  )
 }

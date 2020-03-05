@@ -1,25 +1,26 @@
+import { GitHubIcon } from '@devhub/core'
 import React, { useRef, useState } from 'react'
 import { StyleProp, TextStyle } from 'react-native'
 
-import { GitHubIcon } from '@devhub/core'
 import { useHover } from '../../hooks/use-hover'
+import { sharedStyles } from '../../styles/shared'
 import { contentPadding } from '../../styles/variables'
-import { SpringAnimatedIcon } from '../animated/spring/SpringAnimatedIcon'
-import { SpringAnimatedText } from '../animated/spring/SpringAnimatedText'
+import { ThemedIcon } from '../themed/ThemedIcon'
+import { ThemedText } from '../themed/ThemedText'
 import {
-  SpringAnimatedTouchableOpacity,
-  SpringAnimatedTouchableOpacityProps,
-} from '../animated/spring/SpringAnimatedTouchableOpacity'
-import { SpringAnimatedView } from '../animated/spring/SpringAnimatedView'
-import { useSpringAnimatedTheme } from '../context/SpringAnimatedThemeContext'
+  ThemedTouchableOpacity,
+  ThemedTouchableOpacityProps,
+} from '../themed/ThemedTouchableOpacity'
+import { ThemedView } from '../themed/ThemedView'
 
 export const fabSize = 44
+export const fabSpacing = contentPadding / 2 // + Math.max(0, (fabSize - defaultButtonSize) / 2) - 2
 
-export interface FABProps extends SpringAnimatedTouchableOpacityProps {
+export interface FABProps extends ThemedTouchableOpacityProps {
   children?: string | React.ReactElement<any>
   iconName?: GitHubIcon
   iconStyle?: StyleProp<TextStyle> | any
-  onPress: SpringAnimatedTouchableOpacityProps['onPress']
+  onPress: ThemedTouchableOpacityProps['onPress']
   tooltip: string
   useBrandColor?: boolean
 }
@@ -35,19 +36,19 @@ export function FAB(props: FABProps) {
     ...otherProps
   } = props
 
-  const springAnimatedTheme = useSpringAnimatedTheme()
-
   const [isPressing, setIsPressing] = useState(false)
 
   const touchableRef = useRef(null)
   const isHovered = useHover(touchableRef)
 
   return (
-    <SpringAnimatedTouchableOpacity
+    <ThemedTouchableOpacity
       ref={touchableRef}
       analyticsCategory="fab"
       {...otherProps}
-      activeOpacity={1}
+      backgroundColor={
+        useBrandColor ? 'primaryBackgroundColor' : 'backgroundColorLess1'
+      }
       hitSlop={{
         top: contentPadding / 2,
         bottom: contentPadding / 2,
@@ -61,9 +62,6 @@ export function FAB(props: FABProps) {
           width: fabSize,
           height: fabSize,
           borderRadius: fabSize / 2,
-          backgroundColor: useBrandColor
-            ? springAnimatedTheme.primaryBackgroundColor
-            : springAnimatedTheme.backgroundColorLess1,
           shadowColor: '#000000',
           shadowOffset: {
             width: 0,
@@ -78,26 +76,29 @@ export function FAB(props: FABProps) {
       ]}
       tooltip={tooltip}
     >
-      <SpringAnimatedView
+      <ThemedView
+        backgroundColor={
+          !!(isHovered || isPressing)
+            ? useBrandColor
+              ? 'backgroundColorTransparent10'
+              : 'backgroundColorLess2'
+            : undefined
+        }
         style={[
+          sharedStyles.flex,
+          sharedStyles.alignItemsCenter,
+          sharedStyles.justifyContentCenter,
+          sharedStyles.overflowHidden,
           {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
             width: fabSize,
             height: fabSize,
             borderRadius: fabSize / 2,
-            overflow: 'hidden',
-          },
-          !!(isHovered || isPressing) && {
-            backgroundColor: useBrandColor
-              ? springAnimatedTheme.backgroundColorTransparent10
-              : springAnimatedTheme.backgroundColorLess2,
           },
         ]}
       >
         {typeof iconName === 'string' ? (
-          <SpringAnimatedIcon
+          <ThemedIcon
+            color={useBrandColor ? 'primaryForegroundColor' : 'foregroundColor'}
             name={iconName}
             style={[
               {
@@ -107,30 +108,25 @@ export function FAB(props: FABProps) {
                 marginTop: 1,
                 fontSize: fabSize / 2,
                 textAlign: 'center',
-                color: useBrandColor
-                  ? springAnimatedTheme.primaryForegroundColor
-                  : springAnimatedTheme.foregroundColor,
               },
               iconStyle,
             ]}
           />
         ) : typeof children === 'string' ? (
-          <SpringAnimatedText
+          <ThemedText
+            color={useBrandColor ? 'primaryForegroundColor' : 'foregroundColor'}
             style={{
               fontSize: 14,
               lineHeight: 14,
               fontWeight: '500',
-              color: useBrandColor
-                ? springAnimatedTheme.primaryForegroundColor
-                : springAnimatedTheme.foregroundColor,
             }}
           >
             {children}
-          </SpringAnimatedText>
+          </ThemedText>
         ) : (
           children
         )}
-      </SpringAnimatedView>
-    </SpringAnimatedTouchableOpacity>
+      </ThemedView>
+    </ThemedTouchableOpacity>
   )
 }

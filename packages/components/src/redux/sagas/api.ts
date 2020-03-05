@@ -7,8 +7,11 @@ import {
   jsonToGraphQLQuery,
   removeUndefinedFields,
   User,
+  UserPlan,
+  VariableType,
 } from '@devhub/core'
 import { bugsnag } from '../../libs/bugsnag'
+import { getDefaultDevHubHeaders } from '../../utils/api'
 import * as actions from '../actions'
 import * as selectors from '../selectors'
 import { RootState } from '../types'
@@ -59,7 +62,7 @@ function* onSyncUp() {
 }
 
 function* onSyncDown() {
-  const state: RootState = yield select()
+  let state: RootState = yield select()
 
   const appToken = selectors.appTokenSelector(state)
   if (!appToken) return
@@ -70,25 +73,84 @@ function* onSyncDown() {
         me?: {
           columns?: User['columns']
           subscriptions: User['subscriptions']
+          plan: UserPlan | null | undefined
         }
       }
       errors?: any[]
     }> = yield axios.post(
       constants.GRAPHQL_ENDPOINT,
       {
-        query: jsonToGraphQLQuery({
-          query: {
-            me: {
-              columns: true,
-              subscriptions: true,
-            },
-          },
-        }),
+        query: `{
+          me {
+            _id
+            columns
+            subscriptions
+            freeTrialStartAt
+            freeTrialEndAt
+            plan {
+              id
+              source
+              type
+
+              stripeIds
+              paddleProductId
+
+              banner
+
+              amount
+              currency
+              trialPeriodDays
+              interval
+              intervalCount
+              label
+              transformUsage {
+                divideBy
+                round
+              }
+              quantity
+              coupon
+
+              dealCode
+
+              status
+
+              startAt
+              cancelAt
+              cancelAtPeriodEnd
+
+              trialStartAt
+              trialEndAt
+
+              currentPeriodStartAt
+              currentPeriodEndAt
+
+              last4
+              reason
+              users
+
+              featureFlags {
+                columnsLimit
+                enableFilters
+                enableSync
+                enablePrivateRepositories
+                enablePushNotifications
+              }
+
+              createdAt
+              updatedAt
+            }
+            createdAt
+            updatedAt
+            lastLoginAt
+          }
+        }`,
       },
       {
-        headers: { Authorization: `bearer ${appToken}` },
+        headers: getDefaultDevHubHeaders({ appToken }),
       },
     )
+
+    state = yield select()
 
     const { data, errors } = response.data
 
@@ -100,7 +162,7 @@ function* onSyncDown() {
       throw Object.assign(new Error('GraphQL Error'), { response })
     }
 
-    const { columns, subscriptions } = data.me
+    const { columns, subscriptions, plan } = data.me
 
     const serverDataIsNewer =
       (columns.updatedAt &&
@@ -130,6 +192,16 @@ function* onSyncDown() {
         }),
       )
     }
+
+    const user = selectors.currentUserSelector(state)
+    if (
+      plan &&
+      user &&
+      user.plan &&
+      JSON.stringify(plan) !== JSON.stringify(user.plan)
+    ) {
+      yield put(actions.updateUserData({ plan }))
+    }
   } catch (error) {
     const description = 'Sync down failed'
     bugsnag.notify(error, { description })
@@ -143,7 +215,7 @@ async function syncUp(state: RootState) {
   if (!appToken) return
 
   const columns = selectors.columnsArrSelector(state)
-  const subscriptions = selectors.subscriptionsArrSelector(state)
+  const subscriptions = selectors.allSubscriptionsArrSelector(state)
 
   try {
     // TODO: Auto generate these typings
@@ -156,14 +228,14 @@ async function syncUp(state: RootState) {
         // TODO: do it the right way ffs
         query: jsonToGraphQLQuery({
           mutation: {
+            __variables: {
+              columns: '[ColumnInput]!',
+              subscriptions: '[ColumnSubscriptionInput]!',
+            },
             replaceColumnsAndSubscriptions: {
               __args: {
-                columns: columns
-                  .filter(Boolean)
-                  .map(c => removeUndefinedFields(c!)),
-                subscriptions: subscriptions
-                  .filter(Boolean)
-                  .map(s => _.omit(removeUndefinedFields(s!), 'data')),
+                columns: new VariableType('columns'),
+                subscriptions: new VariableType('subscriptions'),
                 columnsUpdatedAt:
                   state.columns.updatedAt || new Date().toISOString(),
                 subscriptionsUpdatedAt:
@@ -172,9 +244,15 @@ async function syncUp(state: RootState) {
             },
           },
         }),
+        variables: {
+          columns: columns.filter(Boolean).map(c => removeUndefinedFields(c!)),
+          subscriptions: subscriptions
+            .filter(Boolean)
+            .map(s => _.omit(removeUndefinedFields(s!), 'data')),
+        },
       },
       {
-        headers: { Authorization: `bearer ${appToken}` },
+        headers: getDefaultDevHubHeaders({ appToken }),
       },
     )
 

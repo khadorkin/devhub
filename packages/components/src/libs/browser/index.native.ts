@@ -1,3 +1,4 @@
+import { constants } from '@devhub/core'
 import { EventEmitter } from 'fbemitter'
 import InAppBrowserReborn from 'react-native-inappbrowser-reborn'
 
@@ -24,17 +25,20 @@ export const Browser: BrowserCrossPlatform = {
     return null
   },
   dismiss: InAppBrowserReborn.close,
-  openURL: async url => {
+  openURL: async (url, options) => {
     try {
       const isAvailable = await InAppBrowserReborn.isAvailable()
       if (!isAvailable) throw new Error('InAppBrowser not available.')
 
       emitter.emit('onShow')
       await InAppBrowserReborn.open(url, {
+        modalEnabled: false,
         preferredBarTintColor: backgroundColor,
         preferredControlTintColor: foregroundColor,
         secondaryToolbarColor: foregroundColor,
         toolbarColor: backgroundColor,
+        waitForRedirectDelay: 500,
+        ...(options && options.native),
       })
 
       emitter.emit('onDismiss')
@@ -49,6 +53,9 @@ export const Browser: BrowserCrossPlatform = {
       return Linking.openURL(url)
     }
   },
+  openURLOnNewTab: (...args) => {
+    Browser.openURL(...args)
+  },
   setBackgroundColor: color => {
     backgroundColor = color
   },
@@ -58,7 +65,7 @@ export const Browser: BrowserCrossPlatform = {
 }
 
 Linking.addEventListener('url', ({ url }) => {
-  if (url && url.startsWith('devhub://')) {
+  if (url && url.startsWith(`${constants.APP_DEEP_LINK_SCHEMA}://`)) {
     InAppBrowserReborn.close()
   }
 })

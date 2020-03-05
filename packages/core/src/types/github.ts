@@ -1,8 +1,11 @@
-export type GitHubAppType = 'app' | 'oauth'
+import { Octokit } from '@octokit/rest'
+
+export type GitHubAppType = 'app' | 'oauth' | 'personal'
 export type GitHubAppTokenType =
+  | 'app-installation'
   | 'app-user-to-server'
   | 'oauth'
-  | 'app-installation'
+  | 'personal'
 
 export type GitHubActivityType =
   | 'ORG_PUBLIC_EVENTS'
@@ -16,16 +19,18 @@ export type GitHubActivityType =
   | 'USER_RECEIVED_PUBLIC_EVENTS'
 
 export type GitHubExtractParamsFromMethod<F> = F extends (
-  params: infer P,
-  callback: any,
+  params?: infer P,
 ) => any
-  ? P
+  ? Omit<P, keyof Octokit.RequestOptions>
+  : F extends (params: infer P, callback: any) => any
+  ? Omit<P, keyof Octokit.RequestOptions>
   : never
 
 export type GitHubExtractResponseFromMethod<F> = F extends (
-  params: any,
-  callback: any,
+  params?: any,
 ) => infer R
+  ? (R extends Promise<infer RR> ? RR : R)
+  : F extends (params: any, callback: any) => infer R
   ? R extends Promise<infer RR>
     ? RR
     : R
@@ -82,6 +87,7 @@ export interface GitHubReaction {
 
 export interface GitHubComment {
   id: number | string
+  node_id?: string
   commit_id?: string // 6ef64f902613c73251da32d1bc9eb236f38798cc
   user: GitHubUser
   body: string
@@ -179,6 +185,7 @@ export interface GitHubMilestone {
 
 export interface GitHubIssue {
   id: number | string
+  node_id?: string
   user: GitHubUser
   assignee?: GitHubUser | null
   assignees?: GitHubUser[]
@@ -210,6 +217,7 @@ export interface GitHubOrg {
 
 export interface GitHubPullRequest {
   id: number | string // 95201658
+  node_id?: string
   number: number // 2
   state: 'open' | 'closed' // closed
   locked: boolean // false
@@ -239,6 +247,7 @@ export interface GitHubPullRequest {
   merged_by: GitHubUser // User
   comments: number // 0
   review_comments: number // 0
+  requested_reviewers?: GitHubUser[] | null // []
   commits: number // 2
   additions: number // 4
   deletions: number // 4
@@ -256,7 +265,7 @@ export interface GitHubRepo {
   private: boolean
   owner?: GitHubOrg | GitHubUser | undefined
   url: string // https://api.github.com/repos/facebook/react
-  html_url: string // https://github.com/facebook/react
+  html_url?: string // https://github.com/facebook/react
 }
 
 export interface GitHubPage {
@@ -264,6 +273,7 @@ export interface GitHubPage {
   page_name: string
   sha: string
   title: string
+  summary?: string | null
   html_url: string
   url: string
 }
@@ -652,6 +662,8 @@ export type GitHubEventSubjectType =
   | 'User'
   | 'Wiki'
 
+export type GitHubPrivacy = 'public' | 'private'
+
 export type GitHubStateType = 'open' | 'closed' | 'merged'
 
 export type GitHubIssueOrPullRequest = GitHubIssue | GitHubPullRequest
@@ -857,7 +869,7 @@ export type GitHubNotificationReason =
   | 'invitation' // You accepted an invitation to contribute to the repository.
   | 'manual' // You subscribed to the thread (via an Issue or Pull Request).
   | 'mention' // You were specifically @mentioned in the content.
-  | 'review_requested' // Someone requested your review on a pull request
+  | 'review_requested' // Someone requested your review (or your team's) on a pull request
   | 'security_alert' // Potential security vulnerability alert
   | 'state_change' // You changed the thread state (for example, closing an Issue or merging a PR).
   | 'subscribed' // You're watching the repository.

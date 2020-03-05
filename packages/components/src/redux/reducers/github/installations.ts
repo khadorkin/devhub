@@ -13,7 +13,9 @@ export interface State {
   // byRepoFullName: Record<string, number>
 
   error?: string | null
-  lastFetchedAt: string | null
+  lastFetchFailureAt: string | null
+  lastFetchRequestAt: string | null
+  lastFetchSuccessAt: string | null
   loadState: LoadState
   updatedAt: string | null
 }
@@ -27,7 +29,9 @@ const initialState: State = {
   // byRepoFullName: {},
 
   error: null,
-  lastFetchedAt: null,
+  lastFetchFailureAt: null,
+  lastFetchRequestAt: null,
+  lastFetchSuccessAt: null,
   loadState: 'not_loaded',
   updatedAt: null,
 }
@@ -39,18 +43,19 @@ export const githubInstallationsReducer: Reducer<State> = (
   switch (action.type) {
     case 'REFRESH_INSTALLATIONS_REQUEST':
       return immer(state, draft => {
-        draft.lastFetchedAt = new Date().toISOString()
+        draft.lastFetchRequestAt = new Date().toISOString()
         draft.loadState = 'loading'
       })
 
     case 'REFRESH_INSTALLATIONS_SUCCESS':
       return immer(state, draft => {
         draft.error = null
+        draft.lastFetchSuccessAt = new Date().toISOString()
         draft.loadState = 'loaded'
         draft.updatedAt = new Date().toISOString()
 
         const installations = action.payload
-        if (!(installations && installations.length)) return
+        if (!installations) return
 
         const {
           allIds,
@@ -73,8 +78,14 @@ export const githubInstallationsReducer: Reducer<State> = (
         // }
       })
 
+    case 'REFRESH_INSTALLATIONS_NOOP':
+      return immer(state, draft => {
+        if (draft.loadState === 'loading') draft.loadState = 'loaded'
+      })
+
     case 'REFRESH_INSTALLATIONS_FAILURE':
       return immer(state, draft => {
+        draft.lastFetchFailureAt = new Date().toISOString()
         draft.error = `${(action.error && action.error.message) ||
           action.error}`
         draft.loadState = 'error'

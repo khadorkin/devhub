@@ -1,8 +1,8 @@
-import { all, delay, put, select, takeLatest } from 'redux-saga/effects'
+import { AppState, InteractionManager } from 'react-native'
+import { all, call, put, select, takeLatest } from 'redux-saga/effects'
 
 import {
-  ActivityColumnSubscription,
-  AppViewMode,
+  ActivityColumnSubscriptionCreation,
   Column,
   ColumnsAndSubscriptions,
   ColumnSubscription,
@@ -13,6 +13,7 @@ import {
   isReadFilterChecked,
   IssueOrPullRequestColumn,
   IssueOrPullRequestColumnSubscription,
+  IssueOrPullRequestColumnSubscriptionCreation,
   itemPassesFilterRecord,
   NotificationColumn,
   NotificationColumnSubscription,
@@ -28,31 +29,58 @@ export function getDefaultColumns(username: string): ColumnsAndSubscriptions {
     subtype: undefined,
     params: {
       all: true,
-      participating: true,
+      participating: false,
     },
   }) as NotificationColumnSubscription
 
-  const userReceivedEventsSubscription = createSubscriptionObjectWithId({
+  const userReceivedEventsSubscription = createSubscriptionObjectWithId<
+    ActivityColumnSubscriptionCreation
+  >({
     type: 'activity',
     subtype: 'USER_RECEIVED_EVENTS',
     params: {
       username,
     },
-  }) as ActivityColumnSubscription
+  })
 
-  const userEventsSubscription = createSubscriptionObjectWithId({
+  const involvedIssuesAndPRsSubscription = createSubscriptionObjectWithId<
+    IssueOrPullRequestColumnSubscriptionCreation
+  >({
+    type: 'issue_or_pr',
+    subtype: undefined,
+    params: {
+      involves: { [username.toLowerCase()]: true },
+      subjectType: undefined,
+    },
+  })
+
+  const myReposIssuesAndPRsSubscription = createSubscriptionObjectWithId<
+    IssueOrPullRequestColumnSubscriptionCreation
+  >({
+    type: 'issue_or_pr',
+    subtype: undefined,
+    params: {
+      owners: { [username.toLowerCase()]: { value: true, repos: {} } },
+      subjectType: undefined,
+    },
+  })
+
+  const userEventsSubscription = createSubscriptionObjectWithId<
+    ActivityColumnSubscriptionCreation
+  >({
     type: 'activity',
     subtype: 'USER_EVENTS',
     params: {
       username,
     },
-  }) as ActivityColumnSubscription
+  })
 
   const result: ColumnsAndSubscriptions = {
     columns: [
       {
         id: guid(),
         subscriptionIds: [notificationSubscription.id],
+        subscriptionIdsHistory: [notificationSubscription.id],
         type: 'notifications',
         filters: {
           notifications: {
@@ -63,12 +91,52 @@ export function getDefaultColumns(username: string): ColumnsAndSubscriptions {
       {
         id: guid(),
         subscriptionIds: [userReceivedEventsSubscription.id],
+        subscriptionIdsHistory: [userReceivedEventsSubscription.id],
         type: 'activity',
-        filters: undefined,
+        filters: {
+          subjectTypes: {
+            Commit: true,
+            Release: true,
+            Repository: true,
+            Tag: true,
+            User: true,
+          },
+        },
+      },
+      {
+        id: guid(),
+        subscriptionIds: [involvedIssuesAndPRsSubscription.id],
+        subscriptionIdsHistory: [involvedIssuesAndPRsSubscription.id],
+        type: 'issue_or_pr',
+        filters: {
+          involves: involvedIssuesAndPRsSubscription.params.involves,
+          owners: involvedIssuesAndPRsSubscription.params.owners,
+          subjectTypes: involvedIssuesAndPRsSubscription.params.subjectType
+            ? {
+                [involvedIssuesAndPRsSubscription.params.subjectType]: true,
+              }
+            : undefined,
+        },
+      },
+      {
+        id: guid(),
+        subscriptionIds: [myReposIssuesAndPRsSubscription.id],
+        subscriptionIdsHistory: [myReposIssuesAndPRsSubscription.id],
+        type: 'issue_or_pr',
+        filters: {
+          involves: myReposIssuesAndPRsSubscription.params.involves,
+          owners: myReposIssuesAndPRsSubscription.params.owners,
+          subjectTypes: myReposIssuesAndPRsSubscription.params.subjectType
+            ? {
+                [myReposIssuesAndPRsSubscription.params.subjectType]: true,
+              }
+            : undefined,
+        },
       },
       {
         id: guid(),
         subscriptionIds: [userEventsSubscription.id],
+        subscriptionIdsHistory: [userEventsSubscription.id],
         type: 'activity',
         filters: undefined,
       },
@@ -76,6 +144,8 @@ export function getDefaultColumns(username: string): ColumnsAndSubscriptions {
     subscriptions: [
       notificationSubscription,
       userReceivedEventsSubscription,
+      involvedIssuesAndPRsSubscription,
+      myReposIssuesAndPRsSubscription,
       userEventsSubscription,
     ],
   }
@@ -90,7 +160,8 @@ function* onAddColumn(
 ) {
   const columnId = action.payload.column.id
 
-  yield delay(300)
+  if (AppState.currentState === 'active')
+    yield call(InteractionManager.runAfterInteractions)
 
   emitter.emit('FOCUS_ON_COLUMN', {
     animated: true,
@@ -103,8 +174,6 @@ function* onAddColumn(
 function* onMoveColumn(
   action: ExtractActionFromActionCreator<typeof actions.moveColumn>,
 ) {
-  const appViewMode: AppViewMode = yield select(selectors._appViewModeSelector)
-
   const ids: string[] = yield select(selectors.columnIdsSelector)
   if (!(ids && ids.length)) return
 
@@ -117,11 +186,12 @@ function* onMoveColumn(
   const columnId = action.payload.columnId
 
   emitter.emit('FOCUS_ON_COLUMN', {
-    animated: appViewMode === 'multi-column',
-    highlight: appViewMode === 'multi-column',
+    animated: true,
+    highlight: false,
     scrollTo: true,
     ...action.payload,
     columnId,
+    focusOnVisibleItem: true,
   })
 }
 
@@ -149,66 +219,29 @@ function* onSetClearedAt(
     typeof actions.setColumnClearedAtFilter
   >,
 ) {
-  if (!(action.payload.clearedAt && action.payload.columnId)) return
+  if (!action.payload.clearedAt) return
 
-  const column: Column = yield select(
-    selectors.columnSelector,
-    action.payload.columnId,
-  )
-
-  if (!(column && column.subscriptionIds && column.subscriptionIds.length))
-    return
-
-  const columns: Column[] = yield select(selectors.columnsArrSelector)
-  if (!(columns && columns.length)) return
-
-  yield all(
-    column.subscriptionIds.map(function*(subscriptionId) {
-      if (!subscriptionId) return
-
-      // deleteOlderThan will consider the clearedAt of the other columns
-      // that are also using this subscription
-      // because we cant remove their items, their columns were not cleared
-      let deleteOlderThan = action.payload.clearedAt || undefined
-
-      let hasColumnWithoutClearedAt = false
-      columns.forEach(c => {
-        if (!c.subscriptionIds.includes(subscriptionId)) return
-
-        if (!(c.filters && c.filters.clearedAt))
-          hasColumnWithoutClearedAt = true
-        if (hasColumnWithoutClearedAt) return
-
-        if (
-          c.filters &&
-          c.filters.clearedAt &&
-          (!deleteOlderThan || c.filters.clearedAt < deleteOlderThan)
-        ) {
-          deleteOlderThan = c.filters.clearedAt
-        }
-      })
-
-      if (hasColumnWithoutClearedAt) return
-
-      return yield put(
-        actions.cleanupSubscriptionsData({
-          deleteOlderThan,
-          subscriptionIds: [subscriptionId],
-        }),
-      )
-    }),
-  )
+  yield put(actions.cleanupArchivedItems())
 }
 
 function* onColumnSubscriptionFilterChange(
   action:
-    | ExtractActionFromActionCreator<typeof actions.setColumnUnreadFilter>
+    | ExtractActionFromActionCreator<typeof actions.clearColumnFilters>
+    | ExtractActionFromActionCreator<typeof actions.replaceColumnFilters>
+    | ExtractActionFromActionCreator<typeof actions.replaceColumnOwnerFilter>
+    | ExtractActionFromActionCreator<typeof actions.replaceColumnWatchingFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColummDraftFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnInvolvesFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnLabelFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnOwnerFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnWatchingFilter>
     | ExtractActionFromActionCreator<
         typeof actions.setColumnParticipatingFilter
       >
-    | ExtractActionFromActionCreator<typeof actions.setColummSubjectTypeFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnRepoFilter>
     | ExtractActionFromActionCreator<typeof actions.setColummStateTypeFilter>
-    | ExtractActionFromActionCreator<typeof actions.setColummDraftFilter>,
+    | ExtractActionFromActionCreator<typeof actions.setColummSubjectTypeFilter>
+    | ExtractActionFromActionCreator<typeof actions.setColumnUnreadFilter>,
 ) {
   if (!action.payload.columnId) return
 
@@ -219,7 +252,7 @@ function* onColumnSubscriptionFilterChange(
   if (!(column && column.id)) return
 
   const subscriptions: ColumnSubscription[] = yield select(
-    selectors.columnSubscriptionsSelector,
+    selectors.createColumnSubscriptionsSelector(),
     column.id,
   )
   if (!(subscriptions && subscriptions.length)) return
@@ -257,7 +290,7 @@ function* onColumnSubscriptionFilterChange(
           subtype: subscription.subtype,
           params: newSubscriptionParams,
           data: {
-            items: subscription.data.items,
+            itemNodeIdOrIds: subscription.data.itemNodeIdOrIds,
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -276,6 +309,25 @@ function* onColumnSubscriptionFilterChange(
           ...subscription.params,
           draft: c.filters ? c.filters.draft : subscription.params.draft,
           state: c.filters ? c.filters.state : subscription.params.state,
+          involves: c.filters
+            ? c.filters.involves
+            : subscription.params.involves,
+          owners:
+            action.type === 'CLEAR_COLUMN_FILTERS' ||
+            action.type === 'REPLACE_COLUMN_FILTERS' ||
+            action.type === 'REPLACE_COLUMN_OWNER_FILTER' ||
+            action.type === 'REPLACE_COLUMN_WATCHING_FILTER' ||
+            action.type === 'SET_COLUMN_OWNER_FILTER' ||
+            action.type === 'SET_COLUMN_WATCHING_FILTER' ||
+            action.type === 'SET_COLUMN_REPO_FILTER'
+              ? c.filters && c.filters.owners
+              : subscription.params.owners,
+          query:
+            action.type === 'CLEAR_COLUMN_FILTERS' ||
+            action.type === 'REPLACE_COLUMN_FILTERS' ||
+            action.type === 'SET_COLUMN_LABEL_FILTER'
+              ? c.filters && c.filters.query
+              : subscription.params.query,
           subjectType:
             includesIssues && !includesPRs
               ? 'Issue'
@@ -300,7 +352,7 @@ function* onColumnSubscriptionFilterChange(
               : undefined,
           params: newSubscriptionParams,
           data: {
-            items: subscription.data.items,
+            itemNodeIdOrIds: subscription.data.itemNodeIdOrIds,
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -359,11 +411,20 @@ export function* columnsSagas() {
     yield takeLatest('SET_COLUMN_CLEARED_AT_FILTER', onSetClearedAt),
     yield takeLatest(
       [
-        'SET_COLUMN_UNREAD_FILTER',
-        'SET_COLUMN_PARTICIPATING_FILTER',
-        'SET_COLUMN_STATE_FILTER',
+        'CLEAR_COLUMN_FILTERS',
+        'REPLACE_COLUMN_FILTERS',
+        'REPLACE_COLUMN_OWNER_FILTER',
+        'REPLACE_COLUMN_WATCHING_FILTER',
         'SET_COLUMN_DRAFT_FILTER',
+        'SET_COLUMN_INVOLVES_FILTER',
+        'SET_COLUMN_LABEL_FILTER',
+        'SET_COLUMN_OWNER_FILTER',
+        'SET_COLUMN_PARTICIPATING_FILTER',
+        'SET_COLUMN_REPO_FILTER',
+        'SET_COLUMN_STATE_FILTER',
         'SET_COLUMN_SUBJECT_TYPE_FILTER',
+        'SET_COLUMN_UNREAD_FILTER',
+        'SET_COLUMN_WATCHING_FILTER',
       ],
       onColumnSubscriptionFilterChange,
     ),

@@ -3,15 +3,16 @@ import bugsnagReact from '@bugsnag/plugin-react'
 import _ from 'lodash'
 import React from 'react'
 
-import { appVersion } from '../../components/common/AppVersion'
+import { constants } from '@devhub/core'
 import { BugnsagCrossPlatform } from './'
 import { hideTokenFromString } from './index.shared'
 // import { overrideConsoleError } from './index.shared'
 
 const client = bugsnagJS({
   apiKey: '231f337f6090422c611017d3dab3d32e',
-  appVersion,
+  appVersion: constants.APP_VERSION,
   autoBreadcrumbs: true,
+  interactionBreadcrumbsEnabled: false,
   notifyReleaseStages: ['production'],
 })
 
@@ -27,10 +28,12 @@ export const bugsnag: BugnsagCrossPlatform = {
   },
 
   notify(error, metadata) {
+    if (__DEV__) console.debug('[BUGSNAG]', error, metadata) // tslint:disable-line no-console
+
     client.notify(error, {
       beforeSend: r => {
         if (r.request.url) {
-          r.request.url = hideTokenFromString(r.request.url)
+          r.request.url = hideTokenFromString(r.request.url)!
         }
 
         r.metaData = Object.assign(r.metaData || {}, metadata, {
@@ -42,7 +45,7 @@ export const bugsnag: BugnsagCrossPlatform = {
 
         try {
           const safeMetadata = JSON.parse(
-            hideTokenFromString(JSON.stringify(r.metaData)),
+            hideTokenFromString(JSON.stringify(r.metaData))!,
           )
           if (safeMetadata) r.metaData = safeMetadata
         } catch (e) {

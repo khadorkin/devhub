@@ -1,47 +1,55 @@
-import { getLuminance } from 'polished'
 import React from 'react'
 
 import { isItemRead, ThemeColors } from '@devhub/core'
-import { Separator } from '../../common/Separator'
+import { Separator, separatorSize } from '../../common/Separator'
 import { useTheme } from '../../context/ThemeContext'
 
-export function getCardItemSeparatorThemeColor(
-  backgroundColor: string,
-  isRead?: boolean,
-): keyof ThemeColors {
-  const luminance = getLuminance(backgroundColor)
+export const cardItemSeparatorSize = separatorSize
 
-  if (luminance <= 0.02)
-    return isRead ? 'backgroundColorLighther2' : 'backgroundColor'
-
-  if (luminance >= 0.6)
-    return isRead ? 'backgroundColorDarker2' : 'backgroundColorDarker1'
-
-  return isRead ? 'backgroundColorDarker1' : 'backgroundColor'
+export function getCardItemSeparatorThemeColors({
+  isDark,
+  muted,
+}: {
+  isDark: boolean
+  muted: boolean
+}): [keyof ThemeColors, keyof ThemeColors | undefined] {
+  return isDark
+    ? muted
+      ? ['backgroundColorDarker1', 'backgroundColorLighther1']
+      : ['backgroundColorDarker1', 'backgroundColorLighther2']
+    : muted
+    ? ['backgroundColorDarker2', 'backgroundColor']
+    : ['backgroundColorDarker1', 'backgroundColorLighther2']
 }
 
-export function CardItemSeparator(props: {
-  isRead?: boolean
+export interface CardItemSeparatorProps {
   leadingItem?: any
-}) {
-  const { leadingItem, isRead: _isRead } = props
+  muted?: boolean
+}
+
+export function CardItemSeparator(props: CardItemSeparatorProps) {
+  const { leadingItem, muted: _muted } = props
 
   const theme = useTheme()
 
-  const isRead =
-    typeof _isRead === 'boolean'
-      ? _isRead
+  const muted =
+    typeof _muted === 'boolean'
+      ? _muted
       : leadingItem
       ? isItemRead(leadingItem)
       : false
 
+  const cardItemSeparatorThemeColors = getCardItemSeparatorThemeColors({
+    isDark: theme.isDark,
+    muted,
+  })
+
   return (
     <Separator
-      backgroundThemeColor={getCardItemSeparatorThemeColor(
-        theme.backgroundColor,
-        isRead,
-      )}
+      backgroundThemeColor1={cardItemSeparatorThemeColors[0]}
+      backgroundThemeColor2={cardItemSeparatorThemeColors[1]}
       horizontal
+      thick={false}
     />
   )
 }

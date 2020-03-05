@@ -1,10 +1,11 @@
+import { GitHubIcon } from '@devhub/core'
 import React from 'react'
 import { Animated, StyleSheet } from 'react-native'
 import { RectButton } from 'react-native-gesture-handler'
 import Swipeable from 'react-native-gesture-handler/Swipeable'
 
-import { GitHubIcon } from '@devhub/core'
-import { MaterialIcons as Icon } from '../../libs/vector-icons'
+import { MaterialIcons, Octicons } from '../../libs/vector-icons'
+import { vibrateHapticFeedback } from '../../utils/helpers/shared'
 import {
   BaseSwipeableRow,
   BaseSwipeableRowAction,
@@ -14,39 +15,51 @@ import {
 
 export { defaultWidth } from './BaseSwipeableRow'
 
-export interface GoogleSwipeableRowAction extends BaseSwipeableRowAction {
-  icon: GitHubIcon
-  label: undefined
-}
+const iconSize = 20
 
-export interface GoogleSwipeableRowProps extends BaseSwipeableRowProps {}
+export type GoogleSwipeableRowAction = BaseSwipeableRowAction &
+  (
+    | {
+        iconFamily: 'octicons'
+        icon: GitHubIcon
+      }
+    | {
+        iconFamily: 'material'
+        icon: string
+      })
 
-const AnimatedIcon = Animated.createAnimatedComponent(Icon)
+export interface GoogleSwipeableRowProps
+  extends BaseSwipeableRowProps<GoogleSwipeableRowAction> {}
+
+const AnimatedOcticons = Animated.createAnimatedComponent(Octicons)
+const AnimatedMaterialIcons = Animated.createAnimatedComponent(MaterialIcons)
 
 export class GoogleSwipeableRow extends BaseSwipeableRow<
   GoogleSwipeableRowProps,
   void,
   GoogleSwipeableRowAction
 > {
-  _swipeableRow = null
-
   renderButtonAction = (
     action: GoogleSwipeableRowAction,
     {
-      dragX,
+      dragAnimatedValue,
       placement,
       x,
-    }: { dragX: Animated.Value; placement: Placement; x: number },
+    }: {
+      dragAnimatedValue: Animated.AnimatedInterpolation
+      placement: Placement
+      x: number
+    },
   ) => {
     const transform = {
       scale:
         placement === 'LEFT'
-          ? dragX.interpolate({
+          ? dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
               inputRange: [x - 80, x],
               outputRange: [0, 1],
             })
-          : dragX.interpolate({
+          : dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
               inputRange: [-x, -x + 80],
               outputRange: [1, 0],
@@ -56,22 +69,26 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
     const pressHandler = () => {
       action.onPress()
       this.close()
-      // alert(action.label)
     }
+
+    const AnimatedIcon =
+      action.iconFamily === 'material'
+        ? AnimatedMaterialIcons
+        : AnimatedOcticons
 
     return (
       <RectButton
         key={`swipeable-button-action-${action.key}`}
         style={[
           styles.baseActionContainer,
-          { alignItems: 'center', backgroundColor: action.color },
+          { alignItems: 'center', backgroundColor: action.backgroundColor },
         ]}
         onPress={pressHandler}
       >
         <AnimatedIcon
           name={action.icon}
-          size={30}
-          color={action.textColor || '#FFFFFF'}
+          size={iconSize}
+          color={action.foregroundColor || '#FF0000'}
           style={[styles.actionIcon, { transform: [transform] }] as any}
         />
       </RectButton>
@@ -80,17 +97,23 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
 
   renderFullAction = (
     action: GoogleSwipeableRowAction,
-    { dragX, placement }: { dragX: Animated.Value; placement: Placement },
+    {
+      dragAnimatedValue,
+      placement,
+    }: {
+      dragAnimatedValue: Animated.AnimatedInterpolation
+      placement: Placement
+    },
   ) => {
     const transform = {
       scale:
         placement === 'LEFT'
-          ? dragX.interpolate({
+          ? dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
               inputRange: [0, 80],
               outputRange: [0, 1],
             })
-          : dragX.interpolate({
+          : dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
               inputRange: [-80, 0],
               outputRange: [1, 0],
@@ -102,6 +125,11 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
       this.close()
     }
 
+    const AnimatedIcon =
+      action.iconFamily === 'material'
+        ? AnimatedMaterialIcons
+        : AnimatedOcticons
+
     return (
       <RectButton
         key={`swipeable-full-action-${action.key}`}
@@ -109,15 +137,15 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
           styles.baseActionContainer,
           {
             alignItems: placement === 'LEFT' ? 'flex-start' : 'flex-end',
-            backgroundColor: action.color,
+            backgroundColor: action.backgroundColor,
           },
         ]}
         onPress={pressHandler}
       >
         <AnimatedIcon
           name={action.icon}
-          size={30}
-          color={action.textColor || '#FFFFFF'}
+          size={iconSize}
+          color={action.foregroundColor || '#FF0000'}
           style={[styles.actionIcon, { transform: [transform] }] as any}
         />
       </RectButton>
@@ -130,9 +158,29 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
     return (
       <Swipeable
         {...props}
-        ref={this.updateRef}
+        ref={this.swipeableRef}
         friction={2}
         leftThreshold={80}
+        onSwipeableLeftWillOpen={() => {
+          const fullAction = props.leftActions.find(a => a.type === 'FULL')
+          if (fullAction) {
+            fullAction.onPress()
+            if (this.swipeableRef.current) this.swipeableRef.current.close()
+            vibrateHapticFeedback()
+          }
+
+          if (props.onSwipeableLeftWillOpen) props.onSwipeableLeftWillOpen()
+        }}
+        onSwipeableRightWillOpen={() => {
+          const fullAction = props.rightActions.find(a => a.type === 'FULL')
+          if (fullAction) {
+            fullAction.onPress()
+            if (this.swipeableRef.current) this.swipeableRef.current.close()
+            vibrateHapticFeedback()
+          }
+
+          if (props.onSwipeableRightWillOpen) props.onSwipeableRightWillOpen()
+        }}
         renderLeftActions={this.renderLeftActions}
         renderRightActions={this.renderRightActions}
         rightThreshold={40}
@@ -152,6 +200,6 @@ const styles = StyleSheet.create({
   actionIcon: {
     backgroundColor: 'transparent',
     marginHorizontal: 10,
-    width: 30,
+    width: iconSize,
   },
 })

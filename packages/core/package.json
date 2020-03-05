@@ -1,32 +1,38 @@
 {
   "name": "@devhub/core",
-  "version": "0.81.0",
+  "version": "0.100.2",
   "private": false,
   "main": "dist/index.js",
   "scripts": {
-    "compile": "tsc -b",
-    "clean": "shx rm -rf dist/*",
+    "clean": "shx rm -f *.tsbuildinfo && shx rm -rf dist && mkdirp dist",
+    "compile": "tsc -b --incremental",
     "format": "prettier --write '{.,src/**}/*.{js,jsx,ts,tsx}'",
     "lint": "tslint -p .",
-    "prepare": "cd .. && yarn patch-package"
+    "prepare": "cd .. && yarn patch-package",
+    "prepublish": "yarn compile"
   },
   "dependencies": {
-    "@octokit/rest": "16.20.0",
+    "@octokit/rest": "16.43.1",
+    "axios": "0.19.0",
     "gravatar": "1.8.0",
-    "immer": "2.1.4",
+    "immer": "4.0.1",
     "json-to-graphql-query": "1.9.0",
-    "lodash": "4.17.11",
-    "moment": "2.24.0"
+    "lodash": "4.17.15",
+    "moment": "2.24.0",
+    "polished": "3.4.1",
+    "qs": "6.9.1"
   },
   "devDependencies": {
-    "@octokit/webhooks": "5.3.3",
+    "@octokit/webhooks": "7.0.0",
     "@types/fbemitter": "2.0.32",
-    "@types/lodash": "4.14.123",
-    "prettier": "1.16.4",
-    "tslint": "5.14.0",
-    "tslint-config-airbnb": "5.11.1",
+    "@types/lodash": "4.14.149",
+    "@types/qs": "6.9.0",
+    "mkdirp": "0.5.1",
+    "prettier": "1.18.2",
+    "tslint": "5.20.1",
+    "tslint-config-airbnb": "5.11.2",
     "tslint-config-prettier": "1.18.0",
-    "tslint-react": "3.6.0",
-    "typescript": "3.3.4000"
+    "tslint-react": "4.1.0",
+    "typescript": "3.7.5"
   }
 }

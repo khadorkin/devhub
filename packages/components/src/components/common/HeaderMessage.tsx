@@ -1,6 +1,7 @@
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 
+import { sharedStyles } from '../../styles/shared'
 import { contentPadding, smallTextSize } from '../../styles/variables'
 import { ThemedText, ThemedTextProps } from '../themed/ThemedText'
 import {
@@ -37,7 +38,7 @@ export function HeaderMessage(props: HeaderMessageProps) {
   const { children, color, style, textStyle, ...restProps } = props
 
   return (
-    <View style={{ width: '100%' }}>
+    <View style={sharedStyles.fullWidth}>
       <ThemedTouchableOpacity
         backgroundColor="backgroundColor"
         {...restProps}
@@ -45,7 +46,7 @@ export function HeaderMessage(props: HeaderMessageProps) {
       >
         {typeof children === 'string' ? (
           <ThemedText
-            color={color || 'foregroundColorMuted60'}
+            color={color || 'foregroundColorMuted65'}
             style={[styles.text, textStyle]}
           >
             {children}

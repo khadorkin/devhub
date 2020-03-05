@@ -1,30 +1,29 @@
+import { ColumnSubscription, fixURLForPlatform } from '@devhub/core'
 import React from 'react'
 import { View } from 'react-native'
 
-import { ColumnSubscription, fixURLForPlatform } from '@devhub/core'
-import { useReduxAction } from '../../../hooks/use-redux-action'
+import { useDispatch } from 'react-redux'
 import { Platform } from '../../../libs/platform'
 import * as actions from '../../../redux/actions'
 import { sharedStyles } from '../../../styles/shared'
-import {
-  contentPadding,
-  smallAvatarSize,
-  smallerTextSize,
-} from '../../../styles/variables'
+import { contentPadding, smallerTextSize } from '../../../styles/variables'
 import { Link } from '../../common/Link'
 import { Spacer } from '../../common/Spacer'
-import { spacingBetweenLeftAndRightColumn } from '../styles'
+import { sizes } from '../BaseCard.shared'
 
 export interface CardActionsProps {
   commentsCount: number | undefined
   commentsLink: string | (() => void) | undefined
   isRead: boolean
   isSaved: boolean
-  itemIds: Array<string | number>
+  itemNodeIdOrIds: string[]
   leftSpacing?: number
+  // muted?: boolean
   rightSpacing?: number
   type: ColumnSubscription['type']
 }
+
+export const cardActionsHeight = smallerTextSize + 3
 
 export function CardActions(props: CardActionsProps) {
   const {
@@ -32,18 +31,15 @@ export function CardActions(props: CardActionsProps) {
     commentsLink,
     isRead,
     isSaved,
-    itemIds,
-    leftSpacing = 2 * smallAvatarSize +
-      2 * spacingBetweenLeftAndRightColumn +
-      contentPadding / 3,
+    itemNodeIdOrIds,
+    leftSpacing = sizes.avatarContainerWidth + sizes.horizontalSpaceSize,
     rightSpacing = 0,
     type,
   } = props
 
-  const markItemsAsReadOrUnread = useReduxAction(
-    actions.markItemsAsReadOrUnread,
-  )
-  const saveItemsForLater = useReduxAction(actions.saveItemsForLater)
+  const muted = false
+
+  const dispatch = useDispatch()
 
   return (
     <View style={sharedStyles.horizontal}>
@@ -52,16 +48,22 @@ export function CardActions(props: CardActionsProps) {
       <Link
         analyticsCategory="card_action"
         analyticsLabel={isSaved ? 'unsave_for_later' : 'save_for_later'}
+        enableUnderlineHover
         hitSlop={{
-          top: contentPadding / 2,
-          bottom: contentPadding / 2,
+          top: 2,
+          bottom: 2,
           left: contentPadding / 4,
           right: contentPadding / 4,
         }}
-        onPress={() => saveItemsForLater({ itemIds, save: !isSaved })}
+        href="javascript:void(0)"
+        onPress={() => {
+          dispatch(
+            actions.saveItemsForLater({ itemNodeIdOrIds, save: !isSaved }),
+          )
+        }}
         textProps={{
-          color: isRead ? 'foregroundColorMuted40' : 'foregroundColorMuted60',
-          style: { fontSize: smallerTextSize },
+          color: muted ? 'foregroundColorMuted40' : 'foregroundColorMuted65',
+          style: { lineHeight: smallerTextSize + 3, fontSize: smallerTextSize },
         }}
       >
         {isSaved ? 'saved' : 'save'}
@@ -72,17 +74,25 @@ export function CardActions(props: CardActionsProps) {
       <Link
         analyticsCategory="card_action"
         analyticsLabel={isRead ? 'mark_as_unread' : 'mark_as_read'}
+        enableUnderlineHover
         hitSlop={{
-          top: contentPadding / 2,
-          bottom: contentPadding / 2,
+          top: 2,
+          bottom: 2,
           left: contentPadding / 4,
           right: contentPadding / 4,
         }}
-        onPress={() =>
-          markItemsAsReadOrUnread({ type, itemIds, unread: !!isRead })
-        }
+        href="javascript:void(0)"
+        onPress={() => {
+          dispatch(
+            actions.markItemsAsReadOrUnread({
+              type,
+              itemNodeIdOrIds,
+              unread: !!isRead,
+            }),
+          )
+        }}
         textProps={{
-          color: isRead ? 'foregroundColorMuted40' : 'foregroundColorMuted60',
+          color: muted ? 'foregroundColorMuted40' : 'foregroundColorMuted65',
           style: { fontSize: smallerTextSize },
         }}
       >
@@ -99,16 +109,21 @@ export function CardActions(props: CardActionsProps) {
               analyticsCategory="card_action"
               analyticsLabel="commentsCount"
               hitSlop={{
-                top: contentPadding / 2,
-                bottom: contentPadding / 2,
+                top: 2,
+                bottom: 2,
                 left: contentPadding / 4,
                 right: contentPadding / 4,
               }}
               href={
                 typeof commentsLink === 'string'
-                  ? fixURLForPlatform(commentsLink, Platform.realOS, {
-                      addBottomAnchor: true,
-                    })
+                  ? fixURLForPlatform(
+                      commentsLink,
+                      Platform.realOS === 'ios' ||
+                        Platform.realOS === 'android',
+                      {
+                        addBottomAnchor: true,
+                      },
+                    )
                   : undefined
               }
               onPress={
@@ -116,9 +131,9 @@ export function CardActions(props: CardActionsProps) {
               }
               openOnNewTab
               textProps={{
-                color: isRead
+                color: muted
                   ? 'foregroundColorMuted40'
-                  : 'foregroundColorMuted60',
+                  : 'foregroundColorMuted65',
                 style: { fontSize: smallerTextSize },
               }}
             >

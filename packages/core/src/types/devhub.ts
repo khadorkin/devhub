@@ -1,6 +1,8 @@
-import Octokit from '@octokit/rest'
+import { Octokit } from '@octokit/rest'
 
+import { FeatureFlagId, PlanID } from '../utils'
 import {
+  GitHubAppType,
   GitHubComment,
   GitHubCommit,
   GitHubEvent,
@@ -10,54 +12,64 @@ import {
   GitHubIcon,
   GitHubIssue,
   GitHubIssueOrPullRequestSubjectType,
+  GitHubItemSubjectType,
   GitHubNotification,
   GitHubNotificationReason,
   GitHubNotificationSubjectType,
+  GitHubPrivacy,
   GitHubPullRequest,
   GitHubRelease,
   GitHubRepo,
   GitHubStateType,
   GitHubWatchEvent,
 } from './github'
-import { Omit } from './typescript'
+import { GraphQLUserPlan } from './graphql'
 
-type octokit = InstanceType<typeof Octokit>
+export type EnhancedGitHubNotificationReason =
+  | GitHubNotificationReason
+  | 'team_review_requested'
+
+export interface ArchivedEnhancement {
+  // archived_at?: string
+}
 
 export interface ReadUnreadEnhancement {
-  forceUnreadLocally?: boolean // Workaround while GitHub doesn't support marking as unread via api
+  enhanced?: boolean
   last_read_at?: string
   last_unread_at?: string
-  unread?: boolean // GitHub server's value
-  enhanced?: boolean
 }
 
 export interface SaveForLaterEnhancement {
-  saved?: boolean
   enhanced?: boolean
+  last_saved_at?: string
+  last_unsaved_at?: string
 }
 
-export interface NotificationPayloadEnhancement
-  extends ReadUnreadEnhancement,
-    SaveForLaterEnhancement {
+export interface BaseEnhancement
+  extends ArchivedEnhancement,
+    ReadUnreadEnhancement,
+    SaveForLaterEnhancement {}
+
+export interface NotificationPayloadEnhancement extends BaseEnhancement {
   comment?: GitHubComment
   commit?: GitHubCommit
+  enhanced?: boolean
   issue?: GitHubIssue
   pullRequest?: GitHubPullRequest
+  reason?: EnhancedGitHubNotificationReason
   release?: GitHubRelease
-  enhanced?: boolean
+  requestedMyReview?: boolean
 }
 
-export interface IssuePayloadEnhancement
-  extends ReadUnreadEnhancement,
-    SaveForLaterEnhancement {
+export interface IssuePayloadEnhancement extends BaseEnhancement {
   merged?: undefined
+  private?: boolean
   enhanced?: boolean
 }
 
-export interface PullRequestPayloadEnhancement
-  extends ReadUnreadEnhancement,
-    SaveForLaterEnhancement {
+export interface PullRequestPayloadEnhancement extends BaseEnhancement {
   merged?: boolean
+  private?: boolean
   enhanced?: boolean
 }
 
@@ -66,8 +78,10 @@ export type IssueOrPullRequestPayloadEnhancement =
   | PullRequestPayloadEnhancement
 
 export interface EnhancedGitHubNotification
-  extends GitHubNotification,
-    NotificationPayloadEnhancement {}
+  extends Omit<GitHubNotification, 'reason'>,
+    NotificationPayloadEnhancement {
+  reason: EnhancedGitHubNotificationReason
+}
 
 export interface GitHubEnhancedEventBase {
   merged: string[]
@@ -81,8 +95,7 @@ export interface MultipleStarEvent
 }
 
 export type EnhancedGitHubEvent = (GitHubEvent | MultipleStarEvent) &
-  ReadUnreadEnhancement &
-  SaveForLaterEnhancement
+  BaseEnhancement
 
 export type EnhancedGitHubIssue = GitHubIssue & IssuePayloadEnhancement
 
@@ -98,87 +111,95 @@ export type EnhancedItem =
   | EnhancedGitHubEvent
   | EnhancedGitHubIssueOrPullRequest
 
-export interface ColumnSubscriptionData<Item extends EnhancedItem> {
-  items?: Item[]
-  loadState?: EnhancedLoadState
-  errorMessage?: string
+export type DevHubDataItemType = 'event' | 'issue_or_pr' | 'notification' // TODO: 'repo' | 'user' | ...
+
+export interface ColumnSubscriptionData {
   canFetchMore?: boolean
-  lastFetchedAt?: string
+  errorMessage?: string
+  itemNodeIdOrIds?: string[]
+  lastFetchFailureAt?: string
+  lastFetchRequestAt?: string
+  lastFetchSuccessAt?: string
+  loadState?: EnhancedLoadState
+  newestItemDate?: string
+  oldestItemDate?: string
 }
 
 export type ActivityColumnSubscription = {
   id: string
   type: ActivityColumn['type']
-  data: ColumnSubscriptionData<EnhancedGitHubEvent>
+  data: ColumnSubscriptionData
   createdAt: string
   updatedAt: string
 } & (
   | {
       subtype: 'ORG_PUBLIC_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listEventsForOrg']
+        Octokit['activity']['listEventsForOrg']
       >
     }
   | {
       subtype: 'PUBLIC_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listPublicEvents']
+        Octokit['activity']['listPublicEvents']
       >
     }
   | {
       subtype: 'REPO_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listRepoEvents']
+        Octokit['activity']['listRepoEvents']
       >
     }
   | {
       subtype: 'REPO_NETWORK_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listPublicEventsForRepoNetwork']
+        Octokit['activity']['listPublicEventsForRepoNetwork']
       >
     }
   | {
       subtype: 'USER_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listEventsForUser']
+        Octokit['activity']['listEventsForUser']
       >
     }
   | {
       subtype: 'USER_ORG_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listEventsForOrg']
+        Octokit['activity']['listEventsForOrg']
       >
     }
   | {
       subtype: 'USER_PUBLIC_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listPublicEventsForUser']
+        Octokit['activity']['listPublicEventsForUser']
       >
     }
   | {
       subtype: 'USER_RECEIVED_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listReceivedEventsForUser']
+        Octokit['activity']['listReceivedEventsForUser']
       >
     }
   | {
       subtype: 'USER_RECEIVED_PUBLIC_EVENTS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listReceivedPublicEventsForUser']
+        Octokit['activity']['listReceivedPublicEventsForUser']
       >
     })
 
 export interface IssueOrPullRequestColumnSubscription {
   id: string
   type: IssueOrPullRequestColumn['type']
-  subtype: 'ISSUES' | 'PULLS'
+  subtype: 'ISSUES' | 'PULLS' | undefined
   params: {
-    repoFullName?: string
-    subjectType: GitHubIssueOrPullRequestSubjectType
-    state?: ColumnFilters['state']
-    draft?: ColumnFilters['draft']
+    owners?: IssueOrPullRequestColumnFilters['owners']
+    involves?: IssueOrPullRequestColumnFilters['involves']
+    subjectType: GitHubIssueOrPullRequestSubjectType | undefined
+    state?: IssueOrPullRequestColumnFilters['state']
+    draft?: IssueOrPullRequestColumnFilters['draft']
+    query?: string
   }
-  data: ColumnSubscriptionData<any>
+  data: ColumnSubscriptionData
   createdAt: string
   updatedAt: string
 }
@@ -190,37 +211,40 @@ export type NotificationColumnSubscription = {
     all?: boolean
     participating?: boolean
   }
-  data: ColumnSubscriptionData<EnhancedGitHubNotification>
+  data: ColumnSubscriptionData
   createdAt: string
   updatedAt: string
 } & (
   | {
       subtype: undefined | ''
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listNotifications']
+        Octokit['activity']['listNotifications']
       >
     }
   | {
       subtype: 'REPO_NOTIFICATIONS'
       params: GitHubExtractParamsFromMethod<
-        octokit['activity']['listNotificationsForRepo']
+        Octokit['activity']['listNotificationsForRepo']
       >
     })
 
 export interface BaseColumnFilters {
+  bot?: boolean
   clearedAt?: string
   draft?: boolean
-  // order?: Array<'asc' | 'desc'>
-  // owners?: string[]
+  // order?: Array<[string, 'asc' | 'desc']>
+  owners?: Partial<
+    Record<
+      string,
+      {
+        value: boolean | undefined
+        repos: Partial<Record<string, boolean>> | undefined
+      }
+    >
+  >
   private?: boolean
-  // repos?: string[]
+  query?: string
   saved?: boolean
-  // search: {
-  //   exclude?: string
-  //   match?: string
-  //   regex?: string
-  // }
-  // sort?: string[]
   state?: Partial<Record<GitHubStateType, boolean>>
   subjectTypes?:
     | Partial<Record<GitHubEventSubjectType, boolean>>
@@ -233,16 +257,18 @@ export interface ActivityColumnFilters extends BaseColumnFilters {
     actions?: Partial<Record<GitHubEventAction, boolean>>
   }
   subjectTypes?: Partial<Record<GitHubEventSubjectType, boolean>>
+  watching?: Partial<Record<string, boolean>>
 }
 
 export interface IssueOrPullRequestColumnFilters extends BaseColumnFilters {
+  involves?: Partial<Record<string, boolean>>
   subjectTypes?: Partial<Record<GitHubIssueOrPullRequestSubjectType, boolean>>
 }
 
 export interface NotificationColumnFilters extends BaseColumnFilters {
   notifications?: {
     participating?: boolean
-    reasons?: Partial<Record<GitHubNotificationReason, boolean>>
+    reasons?: Partial<Record<EnhancedGitHubNotification['reason'], boolean>>
   }
   subjectTypes?: Partial<Record<GitHubNotificationSubjectType, boolean>>
 }
@@ -252,10 +278,12 @@ export type ColumnFilters =
   | IssueOrPullRequestColumnFilters
   | NotificationColumnFilters
 
-// export interface ColumnOptions {
-//   enableBadge?: boolean
-//   enableNotifications?: boolean
-// }
+export interface ColumnOptions {
+  enableInAppUnreadIndicator?: boolean
+  enableAppIconUnreadIndicator?: boolean
+  enableDesktopPushNotifications?: boolean
+  // enableMobilePushNotifications?: boolean
+}
 
 export type ColumnSubscription =
   | ActivityColumnSubscription
@@ -267,7 +295,8 @@ export interface BaseColumn {
   // title?: string // TODO
   // subtitle?: string // TODO
   subscriptionIds: string[]
-  // options?: ColumnOptions // TODO
+  subscriptionIdsHistory: string[]
+  options?: ColumnOptions
   createdAt: string
   updatedAt: string
 }
@@ -305,10 +334,18 @@ export type GenericColumnCreation<
   updatedAt?: string
 }
 
+export type ActivityColumnCreation = GenericColumnCreation<ActivityColumn>
+export type IssueOrPullRequestColumnCreation = GenericColumnCreation<
+  IssueOrPullRequestColumn
+>
+export type NotificationColumnCreation = GenericColumnCreation<
+  NotificationColumn
+>
+
 export type ColumnCreation =
-  | GenericColumnCreation<ActivityColumn>
-  | GenericColumnCreation<IssueOrPullRequestColumn>
-  | GenericColumnCreation<NotificationColumn>
+  | ActivityColumnCreation
+  | IssueOrPullRequestColumnCreation
+  | NotificationColumnCreation
 
 export type GenericColumnSubscriptionCreation<
   ColumnSubscriptionType extends
@@ -322,10 +359,20 @@ export type GenericColumnSubscriptionCreation<
   updatedAt?: string | undefined
 }
 
+export type ActivityColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
+  ActivityColumnSubscription
+>
+export type IssueOrPullRequestColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
+  IssueOrPullRequestColumnSubscription
+>
+export type NotificationColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
+  NotificationColumnSubscription
+>
+
 export type ColumnSubscriptionCreation =
-  | GenericColumnSubscriptionCreation<ActivityColumnSubscription>
-  | GenericColumnSubscriptionCreation<IssueOrPullRequestColumnSubscription>
-  | GenericColumnSubscriptionCreation<NotificationColumnSubscription>
+  | ActivityColumnSubscriptionCreation
+  | IssueOrPullRequestColumnSubscriptionCreation
+  | NotificationColumnSubscriptionCreation
 
 export type ColumnParamField = 'all' | 'org' | 'owner' | 'repo' | 'username'
 
@@ -333,7 +380,6 @@ export interface AddColumnDetailsPayload {
   title: string
   icon: GitHubIcon
   subscription: Pick<ColumnSubscription, 'type' | 'subtype'>
-  paramList: ColumnParamField[]
   defaultFilters?: Partial<Column['filters']>
   defaultParams?: Partial<Record<ColumnParamField, any>>
   isPrivateSupported: boolean
@@ -369,12 +415,27 @@ export type ModalPayload =
       params?: undefined
     }
   | {
+      name: 'PRICING'
+      params?: {
+        initialSelectedPlanId?: PlanID | undefined
+        highlightFeature?: keyof Plan['featureFlags']
+      }
+    }
+  | {
       name: 'SETTINGS'
       params?: undefined
     }
   | {
       name: 'SETUP_GITHUB_ENTERPRISE'
       params?: undefined
+    }
+  | {
+      name: 'SUBSCRIBE'
+      params: { planId: PlanID | undefined }
+    }
+  | {
+      name: 'SUBSCRIBED'
+      params: { planId: PlanID | undefined }
     }
 
 export type ModalPayloadWithIndex = ModalPayload & { index: number }
@@ -390,14 +451,158 @@ export type EnhancementCache = Map<
 
 export type AppViewMode = 'single-column' | 'multi-column'
 
-export type CardViewMode = 'compact' | 'expanded'
-
 export interface BannerMessage {
   id: string
   message: string
   href?: string
   openOnNewTab?: boolean
+  disableOnSmallScreens?: boolean
   minLoginCount?: number
   closedAt?: string | undefined
   createdAt?: string
+}
+
+export interface ItemFilterCountMetadata {
+  read: 0
+  unread: 0
+  saved: 0
+  total: 0
+}
+
+export interface ItemsFilterMetadata {
+  inbox: {
+    all: ItemFilterCountMetadata
+    participating: ItemFilterCountMetadata
+  }
+  saved: ItemFilterCountMetadata
+  state: Record<GitHubStateType, ItemFilterCountMetadata>
+  draft: ItemFilterCountMetadata
+  bot: ItemFilterCountMetadata
+
+  // items doesn't have enough info to correctly calculate this metadata
+  // involves: Partial<Record<string, ItemFilterCountMetadata | undefined>>
+
+  subjectType: Partial<
+    Record<GitHubItemSubjectType, ItemFilterCountMetadata | undefined>
+  >
+  subscriptionReason: Partial<
+    Record<
+      EnhancedGitHubNotification['reason'],
+      ItemFilterCountMetadata | undefined
+    >
+  >
+  eventAction: Partial<Record<GitHubEventAction, ItemFilterCountMetadata>>
+  privacy: Record<GitHubPrivacy, ItemFilterCountMetadata>
+  owners: Record<
+    string,
+    {
+      metadata: ItemFilterCountMetadata | undefined
+      repos: Record<string, ItemFilterCountMetadata | undefined>
+    }
+  >
+  watching: Record<string, ItemFilterCountMetadata>
+}
+
+export interface OAuthResponseData {
+  app_token?: string
+  code: string
+  github_app_type: GitHubAppType
+  github_login: string
+  github_scope: string[]
+  github_token?: string
+  github_token_created_at?: string
+  github_token_type?: string
+  oauth: boolean
+}
+
+export type DesktopOS = 'macos' | 'windows' | 'linux'
+export type MobileOS = 'ios' | 'android'
+export type OS = DesktopOS | MobileOS
+
+export type DownloadOption =
+  | {
+      category: 'web'
+      platform: 'web'
+      os: OS
+    }
+  | {
+      category: 'mobile'
+      platform: 'ios'
+      os: 'ios'
+    }
+  | {
+      category: 'mobile'
+      platform: 'android'
+      os: 'android'
+    }
+  | {
+      category: 'desktop'
+      platform: 'web'
+      os: DesktopOS
+    }
+  | {
+      category: 'desktop'
+      platform: 'web'
+      os: DesktopOS
+    }
+  | {
+      category: 'desktop'
+      platform: 'web'
+      os: DesktopOS
+    }
+
+export type PlatformCategory = DownloadOption['category']
+export type Platform = DownloadOption['platform']
+
+export type PlanSource = 'stripe' | 'paddle' | 'none' // | 'github_marketplace' | 'opencollective' | 'appstore' | 'playstore'
+export type PlanType = 'individual' | 'team' | 'custom' | undefined
+
+export interface Plan {
+  id: PlanID
+  type: PlanType
+
+  stripeIds: [string, string] | [] // [test, prod]
+  paddleProductId?: number | undefined
+
+  cannonicalId: string
+  label: string
+  description: string
+
+  banner: string | boolean
+
+  amount: number
+  currency: string
+  trialPeriodDays: number
+  interval: 'day' | 'week' | 'month' | 'year' | undefined
+  intervalCount: number
+  transformUsage?: {
+    divideBy: number
+    round: 'up' | 'down'
+  }
+
+  featureLabels: Array<{
+    id: FeatureFlagId
+    label: string
+    available: boolean
+  }>
+
+  featureFlags: {
+    columnsLimit: number
+    enableFilters: boolean
+    enableSync: boolean
+    enablePrivateRepositories: boolean
+    enablePushNotifications: boolean
+  }
+}
+
+export interface UserPlan extends GraphQLUserPlan {}
+
+export interface ItemPushNotification<
+  A extends { type: string; payload: any } = { type: string; payload: any }
+> {
+  title: string
+  subtitle?: string
+  body: string
+  imageURL?: string
+  onClickDispatchAction?: A
 }
