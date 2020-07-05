@@ -10,7 +10,6 @@ import {
   getDateSmallText,
   getDefaultPaginationPerPage,
   getItemNodeIdOrId,
-  GitHubIcon,
   isEventPrivate,
   isItemRead,
   isItemSaved,
@@ -27,6 +26,7 @@ import { useColumnData } from '../../hooks/use-column-data'
 import { useReduxState } from '../../hooks/use-redux-state'
 import { AutoSizer } from '../../libs/auto-sizer'
 import { emitter } from '../../libs/emitter'
+import { IconProp } from '../../libs/vector-icons'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
@@ -93,7 +93,7 @@ export interface ColumnRendererProps {
   columnId: string
   columnIndex: number
   columnType: ColumnT['type']
-  icon: GitHubIcon
+  icon: IconProp
   owner: string | undefined
   pagingEnabled?: boolean
   repo: string | undefined
@@ -137,7 +137,7 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
   const dispatch = useDispatch()
   const store = useStore()
 
-  const clearableItems = (filteredItems as any[]).filter(
+  const hasItemsToMarkAsDone = !!(filteredItems as any[]).some(
     (
       item:
         | EnhancedGitHubEvent
@@ -290,15 +290,16 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
             <ColumnHeader.Button
               key="column-options-button-clear-column"
               analyticsLabel={
-                clearableItems.length ? 'clear_column' : 'unclear_column'
+                hasItemsToMarkAsDone ? 'clear_column' : 'unclear_column'
               }
-              disabled={hasCrossedColumnsLimit || !clearableItems.length}
+              disabled={hasCrossedColumnsLimit || !hasItemsToMarkAsDone}
+              family="octicon"
               name="check"
               onPress={() => {
                 dispatch(
                   actions.setColumnClearedAtFilter({
                     columnId,
-                    clearedAt: clearableItems.length
+                    clearedAt: hasItemsToMarkAsDone
                       ? new Date().toISOString()
                       : null,
                   }),
@@ -306,9 +307,9 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
 
                 focusColumn()
 
-                if (!clearableItems.length) refresh()
+                if (!hasItemsToMarkAsDone) refresh()
               }}
-              tooltip="Clear items"
+              tooltip="Done"
             />
 
             <ColumnHeader.Button
@@ -317,7 +318,8 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
                 !hasOneUnreadItem ? 'mark_as_unread' : 'mark_as_read'
               }
               disabled={hasCrossedColumnsLimit || !filteredItems.length}
-              name={!hasOneUnreadItem ? 'mail' : 'mail-read'}
+              family="octicon"
+              name={!hasOneUnreadItem ? 'eye-closed' : 'eye'}
               onPress={() => {
                 const unread = !hasOneUnreadItem
 
@@ -383,7 +385,8 @@ export const ColumnRenderer = React.memo((props: ColumnRendererProps) => {
               key="column-options-toggle-button"
               analyticsAction="toggle"
               analyticsLabel="column_options"
-              name="gear"
+              family="octicon"
+              name="settings"
               onPress={toggleOptions}
               tooltip="Options"
             />

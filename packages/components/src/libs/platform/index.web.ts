@@ -83,21 +83,13 @@ const realOS = getOSName() || 'web'
 export const Platform = {
   realOS,
   ..._Platform,
+  isDesktop: isElectron(),
   isElectron: isElectron(),
+  isPad: false,
   isStandalone: (window.navigator as any).standalone,
   OS: _Platform.OS as PlatformName,
-  selectUsingRealOS<T>(
-    specifics: PlataformSelectSpecificsEnhanced<T>,
-    { fallbackToWeb = true }: PlatformSelectOptions = {},
-  ) {
-    const result =
-      Platform.realOS in specifics
-        ? specifics[realOS]
-        : fallbackToWeb && 'web' in specifics
-        ? specifics.web
-        : specifics.default
-
-    return result
+  selectUsingRealOS<T>(specifics: PlataformSelectSpecificsEnhanced<T>) {
+    return Platform.realOS in specifics ? specifics[realOS] : specifics.default
   },
   supportsTouch: supportsTouchInput(),
 }

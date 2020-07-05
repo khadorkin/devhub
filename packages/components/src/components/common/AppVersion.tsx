@@ -2,6 +2,7 @@ import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { constants } from '@devhub/core'
+import { normalTextSize } from '../../styles/variables'
 import { Link } from './Link'
 
 const styles = StyleSheet.create({
@@ -11,8 +12,8 @@ const styles = StyleSheet.create({
 
   appVersion: {
     alignSelf: 'center',
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: normalTextSize,
+    lineHeight: normalTextSize * 1.5,
     textAlign: 'center',
   },
 })
@@ -38,7 +39,7 @@ export function AppVersion() {
 }
 
 export function getAppVersionLabel() {
-  const buildNumber = 2689
+  const buildNumber = 2690
 
   return `v${constants.APP_VERSION}${
     constants.IS_BETA && !constants.APP_VERSION.includes('beta')

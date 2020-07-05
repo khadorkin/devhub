@@ -1,10 +1,14 @@
-import { GitHubIcon } from '@devhub/core'
 import React, { useRef, useState } from 'react'
 import { StyleProp, TextStyle } from 'react-native'
 
 import { useHover } from '../../hooks/use-hover'
+import { IconProp } from '../../libs/vector-icons'
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding } from '../../styles/variables'
+import {
+  contentPadding,
+  normalTextSize,
+  scaleFactor,
+} from '../../styles/variables'
 import { ThemedIcon } from '../themed/ThemedIcon'
 import { ThemedText } from '../themed/ThemedText'
 import {
@@ -13,28 +17,19 @@ import {
 } from '../themed/ThemedTouchableOpacity'
 import { ThemedView } from '../themed/ThemedView'
 
-export const fabSize = 44
+export const fabSize = 44 * scaleFactor
 export const fabSpacing = contentPadding / 2 // + Math.max(0, (fabSize - defaultButtonSize) / 2) - 2
 
 export interface FABProps extends ThemedTouchableOpacityProps {
   children?: string | React.ReactElement<any>
-  iconName?: GitHubIcon
-  iconStyle?: StyleProp<TextStyle> | any
+  icon?: IconProp & { style?: StyleProp<TextStyle> | any }
   onPress: ThemedTouchableOpacityProps['onPress']
   tooltip: string
   useBrandColor?: boolean
 }
 
 export function FAB(props: FABProps) {
-  const {
-    children,
-    iconName,
-    iconStyle,
-    style,
-    tooltip,
-    useBrandColor,
-    ...otherProps
-  } = props
+  const { children, icon, style, tooltip, useBrandColor, ...otherProps } = props
 
   const [isPressing, setIsPressing] = useState(false)
 
@@ -65,7 +60,7 @@ export function FAB(props: FABProps) {
           shadowColor: '#000000',
           shadowOffset: {
             width: 0,
-            height: isHovered || isPressing ? 6 : 3,
+            height: isHovered || (isPressing ? 6 : 3) * scaleFactor,
           },
           shadowOpacity: 0.2,
           shadowRadius: 6,
@@ -96,10 +91,10 @@ export function FAB(props: FABProps) {
           },
         ]}
       >
-        {typeof iconName === 'string' ? (
+        {!!(icon && icon.name) ? (
           <ThemedIcon
+            {...icon}
             color={useBrandColor ? 'primaryForegroundColor' : 'foregroundColor'}
-            name={iconName}
             style={[
               {
                 width: fabSize / 2,
@@ -109,15 +104,15 @@ export function FAB(props: FABProps) {
                 fontSize: fabSize / 2,
                 textAlign: 'center',
               },
-              iconStyle,
+              icon.style,
             ]}
           />
         ) : typeof children === 'string' ? (
           <ThemedText
             color={useBrandColor ? 'primaryForegroundColor' : 'foregroundColor'}
             style={{
-              fontSize: 14,
-              lineHeight: 14,
+              fontSize: normalTextSize,
+              lineHeight: normalTextSize,
               fontWeight: '500',
             }}
           >

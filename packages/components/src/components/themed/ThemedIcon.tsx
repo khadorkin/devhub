@@ -1,13 +1,15 @@
 import { Theme, ThemeColors, ThemeTransformer } from '@devhub/core'
 import React from 'react'
 import { StyleProp } from 'react-native'
+import { IconProps } from 'react-native-vector-icons/Icon'
 
 import {
-  MaterialIconProps,
+  IconProp,
   MaterialIcons,
   OcticonIconProps,
   Octicons,
 } from '../../libs/vector-icons'
+import { normalTextSize } from '../../styles/variables'
 import { useTheme } from '../context/ThemeContext'
 import { getThemeColorOrItself } from './helpers'
 
@@ -15,19 +17,15 @@ export type ThemedIconProps = {
   color?: keyof ThemeColors | ((theme: Theme) => string)
   style?: StyleProp<Omit<OcticonIconProps['style'], 'color'>>
   themeTransformer?: ThemeTransformer
-} & (
-  | ({
-      family?: 'octicon'
-    } & Omit<OcticonIconProps, 'color' | 'style'>)
-  | ({
-      family?: 'material'
-    } & Omit<MaterialIconProps, 'color' | 'style'>))
+} & IconProp &
+  Omit<IconProps, 'color' | 'style' | 'name'>
 
 export const ThemedIcon = React.memo(
   React.forwardRef<Octicons | MaterialIcons, ThemedIconProps>((props, ref) => {
     const {
       color: _color,
       family = 'octicon',
+      size = normalTextSize,
       themeTransformer,
       ...otherProps
     } = props
@@ -39,9 +37,11 @@ export const ThemedIcon = React.memo(
     })
 
     if (family === 'material')
-      return <MaterialIcons ref={ref} {...otherProps} color={color} />
+      return (
+        <MaterialIcons ref={ref} {...otherProps} color={color} size={size} />
+      )
 
-    return <Octicons ref={ref} {...otherProps} color={color} />
+    return <Octicons ref={ref} {...otherProps} color={color} size={size} />
   }),
 )
 

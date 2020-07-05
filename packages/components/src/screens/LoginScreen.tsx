@@ -3,7 +3,7 @@ import axios from 'axios'
 import _ from 'lodash'
 import qs from 'qs'
 import React, { useEffect, useRef, useState } from 'react'
-import { Image, StyleSheet, View } from 'react-native'
+import { Image, ScrollView, StyleSheet, View } from 'react-native'
 import url from 'url'
 
 import { getAppVersionLabel } from '../components/common/AppVersion'
@@ -14,6 +14,7 @@ import { Screen } from '../components/common/Screen'
 import { Spacer } from '../components/common/Spacer'
 import { useDialog } from '../components/context/DialogContext'
 import { ThemedText } from '../components/themed/ThemedText'
+import { useDimensions } from '../hooks/use-dimensions'
 import { useReduxAction } from '../hooks/use-redux-action'
 import { useReduxState } from '../hooks/use-redux-state'
 import { analytics } from '../libs/analytics'
@@ -22,12 +23,14 @@ import { bugsnag } from '../libs/bugsnag'
 import { Linking } from '../libs/linking'
 import { executeOAuth } from '../libs/oauth'
 import { getUrlParamsIfMatches } from '../libs/oauth/helpers'
+import { Platform } from '../libs/platform'
 import * as actions from '../redux/actions'
 import * as selectors from '../redux/selectors'
 import { sharedStyles } from '../styles/shared'
 import {
   contentPadding,
   normalTextSize,
+  scaleFactor,
   smallerTextSize,
 } from '../styles/variables'
 import { getDefaultDevHubHeaders } from '../utils/api'
@@ -42,12 +45,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignSelf: 'center',
-    maxWidth: 400,
     width: '100%',
   },
 
   contentContainer: {
-    flex: 1,
     alignItems: 'stretch',
     alignSelf: 'center',
     justifyContent: 'center',
@@ -66,28 +67,29 @@ const styles = StyleSheet.create({
   },
 
   footer: {
+    height: normalTextSize * 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   logo: {
     alignSelf: 'center',
-    height: 80,
+    height: 80 * scaleFactor,
     marginBottom: contentPadding / 2,
-    width: 80,
+    width: 80 * scaleFactor,
   },
 
   title: {
-    fontSize: 30,
+    fontSize: 30 * scaleFactor,
     fontWeight: 'bold',
-    lineHeight: 36,
+    lineHeight: 36 * scaleFactor,
     textAlign: 'center',
   },
 
   subtitle: {
-    fontSize: normalTextSize + 2,
+    fontSize: normalTextSize + 2 * scaleFactor,
     fontWeight: '400',
-    lineHeight: normalTextSize + 4,
+    lineHeight: normalTextSize + 4 * scaleFactor,
     textAlign: 'center',
   },
 
@@ -99,8 +101,8 @@ const styles = StyleSheet.create({
   footerLink: {},
 
   footerLinkText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: normalTextSize,
+    lineHeight: normalTextSize * 1.5,
     textAlign: 'center',
   },
 
@@ -119,6 +121,7 @@ export const LoginScreen = React.memo(() => {
   const error = useReduxState(selectors.authErrorSelector)
   const initialErrorRef = useRef(error)
   const loginRequest = useReduxAction(actions.loginRequest)
+  const dimensions = useDimensions('width')
 
   useEffect(() => {
     analytics.trackScreenView('LOGIN_SCREEN')
@@ -302,7 +305,10 @@ export const LoginScreen = React.memo(() => {
     <Screen>
       <FullHeightScrollView
         alwaysBounceVertical={false}
-        style={styles.container}
+        style={[
+          styles.container,
+          { maxWidth: Math.min(400 * scaleFactor, dimensions.width) },
+        ]}
         contentContainerStyle={styles.contentContainer}
       >
         <View style={styles.header} />
@@ -338,27 +344,29 @@ export const LoginScreen = React.memo(() => {
 
           <Spacer height={contentPadding * 2} />
 
-          <GitHubLoginButton
-            analyticsLabel="github_login_public"
-            disabled={isLoggingIn || isExecutingOAuth}
-            loading={
-              !fullAccessRef.current && (isLoggingIn || isExecutingOAuth)
-            }
-            onPress={() => {
-              fullAccessRef.current = false
-              loginWithGitHub()
-            }}
-            // rightIcon="globe"
-            style={styles.button}
-            subtitle={
-              constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON ||
-              constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON ||
-              !constants.GITHUB_APP_HAS_CODE_ACCESS
-                ? 'Granular permissions'
-                : undefined
-            }
-            title="Sign in with GitHub"
-          />
+          {!Platform.isMacOS && (
+            <GitHubLoginButton
+              analyticsLabel="github_login_public"
+              disabled={isLoggingIn || isExecutingOAuth}
+              loading={
+                !fullAccessRef.current && (isLoggingIn || isExecutingOAuth)
+              }
+              onPress={() => {
+                fullAccessRef.current = false
+                loginWithGitHub()
+              }}
+              // rightIcon={{ family: 'octicon', name: 'globe' }}
+              style={styles.button}
+              subtitle={
+                constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON ||
+                constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON ||
+                !constants.GITHUB_APP_HAS_CODE_ACCESS
+                  ? 'Granular permissions'
+                  : undefined
+              }
+              title="Sign in with GitHub"
+            />
+          )}
 
           {!!constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON && (
             <>
@@ -374,7 +382,7 @@ export const LoginScreen = React.memo(() => {
                   fullAccessRef.current = true
                   loginWithGitHub()
                 }}
-                // rightIcon="lock"
+                // rightIcon={{ family: 'octicon', name: 'lock' }}
                 style={styles.button}
                 subtitle="Full access"
                 title="Sign in with GitHub"
@@ -397,48 +405,49 @@ export const LoginScreen = React.memo(() => {
                   fullAccessRef.current = true
                   loginWithGitHubPersonalAccessToken()
                 }}
-                // rightIcon="key"
+                // rightIcon={{ family: 'octicon', name: 'key' }}
                 style={styles.button}
                 subtitle="Personal token"
                 title="Sign in with GitHub"
-                type="neutral"
+                type={Platform.isMacOS ? 'primary' : 'neutral'}
               />
             </>
           )}
 
-          {!!(
-            constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON ||
-            constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON
-          ) && (
-            <>
-              <Spacer height={contentPadding} />
+          {!Platform.isMacOS &&
+            !!(
+              constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON ||
+              constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON
+            ) && (
+              <>
+                <Spacer height={contentPadding} />
 
-              <ThemedText
-                color="foregroundColorMuted65"
-                style={[
-                  sharedStyles.textCenter,
-                  { fontSize: smallerTextSize, fontStyle: 'italic' },
-                ]}
-              >
-                {`"Granular permissions" is recommended, but feel free to use the ${[
-                  constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON &&
-                    '"Full access"',
-                  constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON &&
-                    '"Personal token"',
-                ]
-                  .filter(Boolean)
-                  .join(
-                    ' or ',
-                  )} option to easily get access to all private repositories you have access.`}
-              </ThemedText>
-            </>
-          )}
+                <ThemedText
+                  color="foregroundColorMuted65"
+                  style={[
+                    sharedStyles.textCenter,
+                    { fontSize: smallerTextSize, fontStyle: 'italic' },
+                  ]}
+                >
+                  {`"Granular permissions" is recommended, but feel free to use the ${[
+                    constants.SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON &&
+                      '"Full access"',
+                    constants.SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON &&
+                      '"Personal token"',
+                  ]
+                    .filter(Boolean)
+                    .join(
+                      ' or ',
+                    )} option to easily get access to all private repositories you have access.`}
+                </ThemedText>
+              </>
+            )}
         </View>
 
         <Spacer height={contentPadding} />
 
         <View style={styles.footer}>
-          <View style={sharedStyles.horizontal}>
+          <ScrollView horizontal>
             <Link
               analyticsCategory="loginscreen"
               analyticsLabel="twitter"
@@ -494,7 +503,7 @@ export const LoginScreen = React.memo(() => {
             >
               {getAppVersionLabel()}
             </Link>
-          </View>
+          </ScrollView>
         </View>
       </FullHeightScrollView>
     </Screen>

@@ -2,9 +2,11 @@ import React from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
 import { PersistGate } from 'redux-persist/integration/react'
 
+import { AppearanceProvider } from '../libs/appearence'
 import { HelmetProvider } from '../libs/helmet'
 import { SafeAreaProvider } from '../libs/safe-area-view'
 import { configureStore } from '../redux/store'
+import { OverrideSystemDialog } from './common/OverrideSystemDialog'
 import { ColumnFiltersProvider } from './context/ColumnFiltersContext'
 import { ColumnFocusProvider } from './context/ColumnFocusContext'
 import { ColumnWidthProvider } from './context/ColumnWidthContext'
@@ -31,11 +33,16 @@ export function AppProviders(props: AppProvidersProps) {
               <ColumnFocusProvider>
                 <ColumnWidthProvider>
                   <ColumnFiltersProvider>
-                    <ThemeProvider>
-                      <SafeAreaProvider>
-                        <DialogProvider>{props.children}</DialogProvider>
-                      </SafeAreaProvider>
-                    </ThemeProvider>
+                    <AppearanceProvider>
+                      <ThemeProvider>
+                        <SafeAreaProvider>
+                          <DialogProvider>
+                            {props.children}
+                            <OverrideSystemDialog />
+                          </DialogProvider>
+                        </SafeAreaProvider>
+                      </ThemeProvider>
+                    </AppearanceProvider>
                   </ColumnFiltersProvider>
                 </ColumnWidthProvider>
               </ColumnFocusProvider>

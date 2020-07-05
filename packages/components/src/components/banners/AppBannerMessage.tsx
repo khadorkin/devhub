@@ -7,11 +7,11 @@ import { useSafeArea } from '../../libs/safe-area-view'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding } from '../../styles/variables'
+import { contentPadding, scaleFactor } from '../../styles/variables'
 import { parseTextWithEmojisToReactComponents } from '../../utils/helpers/github/emojis'
-import { CardItemSeparator } from '../cards/partials/CardItemSeparator'
 import { IconButton } from '../common/IconButton'
 import { Link } from '../common/Link'
+import { Separator } from '../common/Separator'
 import { Spacer } from '../common/Spacer'
 import { ThemedText } from '../themed/ThemedText'
 
@@ -67,8 +67,8 @@ export function AppBannerMessage() {
                 key: `banner-message-${bannerMessage.message}`,
                 imageProps: {
                   style: {
-                    width: 16,
-                    height: 16,
+                    width: 16 * scaleFactor,
+                    height: 16 * scaleFactor,
                   },
                 },
               })}
@@ -82,14 +82,14 @@ export function AppBannerMessage() {
           family="octicon"
           name="x"
           onPress={() => closeBannerMessage(bannerMessage.id)}
-          size={18}
+          size={18 * scaleFactor}
           tooltip="Dismiss"
         />
 
         <Spacer width={contentPadding / 2} />
       </View>
 
-      <CardItemSeparator />
+      <Separator horizontal />
     </View>
   )
 }

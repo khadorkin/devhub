@@ -1,6 +1,6 @@
 import { ModalPayload } from '@devhub/core'
 import React, { useEffect, useRef } from 'react'
-import { NativeComponent, View } from 'react-native'
+import { View } from 'react-native'
 
 import { useFAB } from '../../hooks/use-fab'
 import { useReduxAction } from '../../hooks/use-redux-action'
@@ -43,7 +43,7 @@ export const ModalColumn = React.memo((props: ModalColumnProps) => {
     title,
   } = props
 
-  const columnRef = useRef<NativeComponent>(null)
+  const columnRef = useRef<View>(null)
   const currentOpenedModal = useReduxState(selectors.currentOpenedModal)
   const closeAllModals = useReduxAction(actions.closeAllModals)
   const popModal = useReduxAction(actions.popModal)
@@ -93,6 +93,7 @@ export const ModalColumn = React.memo((props: ModalColumnProps) => {
                 <ColumnHeader.Button
                   analyticsLabel="modal"
                   analyticsAction="back"
+                  family="octicon"
                   name="chevron-left"
                   onPress={() => popModal()}
                   tooltip={`Back (${keyboardShortcutsById.goBack.keys[0]})`}
@@ -108,6 +109,7 @@ export const ModalColumn = React.memo((props: ModalColumnProps) => {
                 <ColumnHeader.Button
                   analyticsAction="close"
                   analyticsLabel="modal"
+                  family="octicon"
                   name="x"
                   onPress={() => closeAllModals()}
                   tooltip={

@@ -1,10 +1,10 @@
-import { GitHubIcon } from '@devhub/core'
 import React from 'react'
 import { Animated, StyleSheet } from 'react-native'
 import { RectButton } from 'react-native-gesture-handler'
 import Swipeable from 'react-native-gesture-handler/Swipeable'
 
-import { MaterialIcons, Octicons } from '../../libs/vector-icons'
+import { IconProp, MaterialIcons, Octicons } from '../../libs/vector-icons'
+import { contentPadding, scaleFactor } from '../../styles/variables'
 import { vibrateHapticFeedback } from '../../utils/helpers/shared'
 import {
   BaseSwipeableRow,
@@ -12,21 +12,13 @@ import {
   BaseSwipeableRowProps,
   Placement,
 } from './BaseSwipeableRow'
-
 export { defaultWidth } from './BaseSwipeableRow'
 
-const iconSize = 20
+const iconSize = 20 * scaleFactor
 
-export type GoogleSwipeableRowAction = BaseSwipeableRowAction &
-  (
-    | {
-        iconFamily: 'octicons'
-        icon: GitHubIcon
-      }
-    | {
-        iconFamily: 'material'
-        icon: string
-      })
+export type GoogleSwipeableRowAction = BaseSwipeableRowAction & {
+  icon: IconProp
+}
 
 export interface GoogleSwipeableRowProps
   extends BaseSwipeableRowProps<GoogleSwipeableRowAction> {}
@@ -56,12 +48,12 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
         placement === 'LEFT'
           ? dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
-              inputRange: [x - 80, x],
+              inputRange: [(x - 80) * scaleFactor, x * scaleFactor],
               outputRange: [0, 1],
             })
           : dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
-              inputRange: [-x, -x + 80],
+              inputRange: [-x * scaleFactor, (-x + 80) * scaleFactor],
               outputRange: [1, 0],
             }),
     }
@@ -72,7 +64,7 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
     }
 
     const AnimatedIcon =
-      action.iconFamily === 'material'
+      action.icon && action.icon.family === 'material'
         ? AnimatedMaterialIcons
         : AnimatedOcticons
 
@@ -86,7 +78,7 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
         onPress={pressHandler}
       >
         <AnimatedIcon
-          name={action.icon}
+          {...action.icon}
           size={iconSize}
           color={action.foregroundColor || '#FF0000'}
           style={[styles.actionIcon, { transform: [transform] }] as any}
@@ -110,12 +102,12 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
         placement === 'LEFT'
           ? dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
-              inputRange: [0, 80],
+              inputRange: [0 * scaleFactor, 80 * scaleFactor],
               outputRange: [0, 1],
             })
           : dragAnimatedValue.interpolate({
               extrapolate: 'clamp',
-              inputRange: [-80, 0],
+              inputRange: [-80 * scaleFactor, 0 * scaleFactor],
               outputRange: [1, 0],
             }),
     }
@@ -126,7 +118,7 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
     }
 
     const AnimatedIcon =
-      action.iconFamily === 'material'
+      action.icon && action.icon.family === 'material'
         ? AnimatedMaterialIcons
         : AnimatedOcticons
 
@@ -143,7 +135,7 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
         onPress={pressHandler}
       >
         <AnimatedIcon
-          name={action.icon}
+          {...action.icon}
           size={iconSize}
           color={action.foregroundColor || '#FF0000'}
           style={[styles.actionIcon, { transform: [transform] }] as any}
@@ -159,8 +151,8 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
       <Swipeable
         {...props}
         ref={this.swipeableRef}
-        friction={2}
-        leftThreshold={80}
+        friction={1}
+        leftThreshold={40 * scaleFactor}
         onSwipeableLeftWillOpen={() => {
           const fullAction = props.leftActions.find(a => a.type === 'FULL')
           if (fullAction) {
@@ -183,7 +175,7 @@ export class GoogleSwipeableRow extends BaseSwipeableRow<
         }}
         renderLeftActions={this.renderLeftActions}
         renderRightActions={this.renderRightActions}
-        rightThreshold={40}
+        rightThreshold={40 * scaleFactor}
       >
         {children}
       </Swipeable>
@@ -199,7 +191,7 @@ const styles = StyleSheet.create({
 
   actionIcon: {
     backgroundColor: 'transparent',
-    marginHorizontal: 10,
+    marginHorizontal: (contentPadding * 2) / 3,
     width: iconSize,
   },
 })

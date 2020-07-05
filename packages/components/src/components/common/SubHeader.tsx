@@ -1,22 +1,22 @@
 import React from 'react'
 
 import { View } from 'react-native'
-import { OcticonIconProps } from '../../libs/vector-icons'
+import { IconProp } from '../../libs/vector-icons'
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding } from '../../styles/variables'
+import { contentPadding, scaleFactor } from '../../styles/variables'
 import { ThemedIcon } from '../themed/ThemedIcon'
 import { H2 } from './H2'
 import { Spacer } from './Spacer'
 
 export interface SubHeaderProps {
   children?: React.ReactNode
-  iconName?: OcticonIconProps['name']
+  icon?: IconProp
   muted?: boolean
   title?: string
 }
 
 export function SubHeader(props: SubHeaderProps) {
-  const { children, iconName, muted, title } = props
+  const { children, icon, muted, title } = props
 
   return (
     <View
@@ -28,18 +28,13 @@ export function SubHeader(props: SubHeaderProps) {
         sharedStyles.padding,
       ]}
     >
-      {!!iconName && (
-        <ThemedIcon
-          color="foregroundColor"
-          family="octicon"
-          name={iconName}
-          size={18}
-        />
+      {!!(icon && icon.name) && (
+        <ThemedIcon {...icon} color="foregroundColor" size={18 * scaleFactor} />
       )}
 
       {!!title && (
         <>
-          {!!iconName && <Spacer width={contentPadding / 2} />}
+          {!!(icon && icon.name) && <Spacer width={contentPadding / 2} />}
 
           <H2 muted={muted} withMargin={false}>
             {title}

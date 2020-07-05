@@ -1,6 +1,6 @@
 import { getDateSmallText, getFullDateText, Theme } from '@devhub/core'
 import React, { Fragment } from 'react'
-import { PixelRatio, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { PixelRatio, ScrollView, StyleSheet, View } from 'react-native'
 import { useDispatch } from 'react-redux'
 
 import { Platform } from '../../libs/platform'
@@ -10,6 +10,7 @@ import {
   avatarSize,
   contentPadding,
   normalTextSize,
+  scaleFactor,
   smallAvatarSize,
   smallerTextSize,
   smallTextSize,
@@ -19,10 +20,12 @@ import { vibrateHapticFeedback } from '../../utils/helpers/shared'
 import { KeyboardKeyIsPressed } from '../AppKeyboardShortcuts'
 import { getCardBackgroundThemeColor } from '../columns/ColumnRenderer'
 import { Avatar } from '../common/Avatar'
+import { ConditionalWrap } from '../common/ConditionalWrap'
 import { IntervalRefresh } from '../common/IntervalRefresh'
 import { Label, smallLabelHeight } from '../common/Label'
 import { Link } from '../common/Link'
 import { Spacer } from '../common/Spacer'
+import { Text } from '../common/Text'
 import { ThemedIcon } from '../themed/ThemedIcon'
 import { ThemedText } from '../themed/ThemedText'
 import { ThemedView } from '../themed/ThemedView'
@@ -49,7 +52,8 @@ const styles = StyleSheet.create({
   innerContainer: {
     width: '100%',
     height: '100%',
-    padding: sizes.cardPadding,
+    paddingHorizontal: sizes.cardPaddingHorizontal,
+    paddingVertical: sizes.cardPaddingVertical,
   },
 
   smallAvatarContainer: {
@@ -78,11 +82,11 @@ const styles = StyleSheet.create({
     width: sizes.iconContainerSize,
     height: sizes.iconContainerSize,
     borderRadius: sizes.iconContainerSize / 2,
-    borderWidth: 2,
+    borderWidth: 2 * scaleFactor,
   },
 
   icon: {
-    marginTop: StyleSheet.hairlineWidth,
+    marginLeft: 1 * scaleFactor,
     fontWeight: 'bold',
     textAlign: 'center',
     fontSize: PixelRatio.roundToNearestPixel(
@@ -92,8 +96,8 @@ const styles = StyleSheet.create({
 
   title: {
     flex: 1,
-    height: sizes.rightTextLineHeight,
-    lineHeight: sizes.rightTextLineHeight,
+    height: sizes.titleLineHeight,
+    lineHeight: sizes.titleLineHeight,
     fontSize: normalTextSize,
     // fontWeight: '500',
     overflow: 'hidden',
@@ -101,33 +105,32 @@ const styles = StyleSheet.create({
 
   subtitle: {
     flexGrow: 1,
-    lineHeight: sizes.rightTextLineHeight,
+    lineHeight: sizes.subtitleLineHeight,
     fontSize: smallerTextSize,
     // fontWeight: '400',
     overflow: 'hidden',
   },
 
   text: {
-    flexGrow: 1,
-    lineHeight: sizes.rightTextLineHeight,
+    lineHeight: sizes.textLineHeight,
     fontSize: smallerTextSize,
     fontWeight: '300',
     overflow: 'hidden',
   },
 
   reason: {
-    lineHeight: sizes.rightTextLineHeight,
+    lineHeight: sizes.textLineHeight,
     fontSize: smallerTextSize,
     fontWeight: '300',
     textAlign: 'right',
   },
 
   timestampText: {
-    lineHeight: sizes.rightTextLineHeight,
+    lineHeight: sizes.titleLineHeight,
     fontSize: smallerTextSize,
     fontWeight: '300',
     overflow: 'hidden',
-    ...Platform.select({ web: { fontFeatureSettings: '"tnum"' } }),
+    // ...Platform.select({ web: { fontFeatureSettings: '"tnum"' } }),
   },
 
   actionContainer: {
@@ -139,7 +142,7 @@ const styles = StyleSheet.create({
 
   action: {
     flex: 1,
-    lineHeight: sizes.actionFontSize + 2,
+    lineHeight: sizes.actionFontSize + 2 * scaleFactor,
     fontSize: sizes.actionFontSize,
     fontWeight: '300',
     overflow: 'hidden',
@@ -295,7 +298,7 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
               style={styles.iconContainer}
             >
               <ThemedIcon
-                name={icon.name}
+                {...icon}
                 color={
                   icon.color ||
                   (isRead ? 'foregroundColorMuted65' : 'foregroundColor')
@@ -308,8 +311,6 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
           <Spacer width={sizes.horizontalSpaceSize} />
 
           <View style={[sharedStyles.flex, sharedStyles.alignSelfCenter]}>
-            <Spacer height={sizes.rightInnerTopSpacing} />
-
             <View style={sharedStyles.horizontalAndVerticallyAligned}>
               <ThemedText
                 color={isRead ? 'foregroundColorMuted65' : 'foregroundColor'}
@@ -322,7 +323,12 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
               {!!showPrivateLock && (
                 <>
                   <Text children="  " />
-                  <ThemedIcon name="lock" color="foregroundColorMuted65" />
+                  <ThemedIcon
+                    family="octicon"
+                    name="lock"
+                    color="foregroundColorMuted65"
+                    size={smallTextSize}
+                  />
                 </>
               )}
 
@@ -349,77 +355,169 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
                 }}
               </IntervalRefresh>
 
-              {!isRead &&
-                (() => {
-                  const dotSize = smallTextSize / 2
+              {!!isSaved && (
+                <>
+                  <Text children="  " />
+                  <ThemedIcon
+                    family="octicon"
+                    name="bookmark"
+                    color="orange"
+                    size={smallTextSize}
+                  />
+                </>
+              )}
 
-                  return (
-                    <>
-                      <Text children="  " />
-
-                      <View
-                        style={{
-                          width: dotSize,
-                          height: dotSize + 1,
-                          paddingTop: 1,
-                        }}
-                        pointerEvents="none"
-                      >
-                        <ThemedView
-                          backgroundColor={
-                            (reason && reason.color) || 'primaryBackgroundColor'
-                          }
-                          style={{
-                            width: dotSize,
-                            height: dotSize,
-                            borderRadius: dotSize / 2,
-                          }}
-                          pointerEvents="none"
-                        />
-                      </View>
-                    </>
-                  )
-                })()}
+              {!isRead && (
+                <>
+                  <Text children="  " />
+                  <ThemedIcon
+                    family="octicon"
+                    name="dot-fill"
+                    color={(reason && reason.color) || 'primaryBackgroundColor'}
+                    size={smallTextSize}
+                  />
+                </>
+              )}
             </View>
 
             {!!subtitle && (
-              <ThemedText
-                color={isRead ? 'foregroundColorMuted65' : 'foregroundColor'}
-                numberOfLines={1}
-                style={[
-                  styles.subtitle,
-                  { fontWeight: isMuted ? '300' : '400' },
-                ]}
-              >
-                {subtitle}
-              </ThemedText>
+              <>
+                <Spacer height={sizes.verticalSpaceSize} />
+
+                <ThemedText
+                  color={isRead ? 'foregroundColorMuted65' : 'foregroundColor'}
+                  numberOfLines={1}
+                  style={[
+                    styles.subtitle,
+                    { fontWeight: isMuted ? '300' : '400' },
+                  ]}
+                >
+                  {subtitle}
+                </ThemedText>
+              </>
             )}
 
             {!!(text && text.text) && (
-              <View
-                style={[
-                  sharedStyles.horizontalAndVerticallyAligned,
-                  sharedStyles.justifyContentSpaceBetween,
-                  sharedStyles.fullWidth,
-                  sharedStyles.fullMaxWidth,
-                  { height: sizes.rightTextLineHeight },
-                ]}
-              >
-                {text.repo && text.repo.owner && text.repo.name && columnId ? (
-                  <Link
-                    TouchableComponent={GestureHandlerTouchableOpacity}
-                    enableUnderlineHover
-                    href={
-                      textIsOnlyIssueNumber && type === 'issue_or_pr'
-                        ? undefined
-                        : 'javascript:void(0)'
-                    }
-                    openOnNewTab={false}
-                    onPress={(() => {
-                      if (textIsOnlyIssueNumber && issueNumber) {
-                        if (type === 'issue_or_pr') return
+              <>
+                <Spacer height={sizes.verticalSpaceSize} />
 
-                        return () => {
+                <View
+                  style={[
+                    sharedStyles.horizontalAndVerticallyAligned,
+                    sharedStyles.justifyContentSpaceBetween,
+                    sharedStyles.fullWidth,
+                    sharedStyles.fullMaxWidth,
+                    { height: sizes.textLineHeight },
+                  ]}
+                >
+                  {text.repo &&
+                  text.repo.owner &&
+                  text.repo.name &&
+                  columnId ? (
+                    <ConditionalWrap
+                      condition={Platform.OS !== 'web'}
+                      wrap={c => (
+                        <View
+                          style={[sharedStyles.flex, sharedStyles.flexWrap]}
+                        >
+                          {c}
+                        </View>
+                      )}
+                    >
+                      <Link
+                        TouchableComponent={GestureHandlerTouchableOpacity}
+                        enableUnderlineHover
+                        href={
+                          textIsOnlyIssueNumber && type === 'issue_or_pr'
+                            ? undefined
+                            : 'javascript:void(0)'
+                        }
+                        openOnNewTab={false}
+                        onPress={(() => {
+                          if (textIsOnlyIssueNumber && issueNumber) {
+                            if (type === 'issue_or_pr') return
+
+                            return () => {
+                              vibrateHapticFeedback()
+
+                              const removeIfAlreadySet = !(
+                                KeyboardKeyIsPressed.meta ||
+                                KeyboardKeyIsPressed.shift
+                              )
+
+                              const removeOthers = !(
+                                KeyboardKeyIsPressed.alt ||
+                                KeyboardKeyIsPressed.meta ||
+                                KeyboardKeyIsPressed.shift
+                              )
+
+                              dispatch(
+                                actions.changeIssueNumberFilter({
+                                  columnId,
+                                  issueNumber,
+                                  removeIfAlreadySet,
+                                  removeOthers,
+                                  value: KeyboardKeyIsPressed.alt
+                                    ? false
+                                    : true,
+                                }),
+                              )
+                            }
+                          }
+
+                          return () => {
+                            vibrateHapticFeedback()
+
+                            dispatch(
+                              actions.setColumnRepoFilter({
+                                columnId,
+                                owner: text!.repo!.owner,
+                                repo: text!.repo!.name,
+                                value: KeyboardKeyIsPressed.alt ? false : true,
+                                // removeIfAlreadySet,
+                                // removeOthers,
+                              }),
+                            )
+                          }
+                        })()}
+                        style={[
+                          sharedStyles.flexShrink1,
+                          sharedStyles.flexNoGrow,
+                        ]}
+                        textProps={{
+                          color: 'foregroundColorMuted65',
+                          numberOfLines: 1,
+                          style: styles.text,
+                        }}
+                      >
+                        {text.text}
+                      </Link>
+                    </ConditionalWrap>
+                  ) : (
+                    <ThemedText
+                      color="foregroundColorMuted65"
+                      numberOfLines={1}
+                      style={[styles.text, sharedStyles.flex]}
+                    >
+                      {text.text}
+                    </ThemedText>
+                  )}
+
+                  {!!(reason && reason.label && columnId) && (
+                    <View
+                      style={[
+                        sharedStyles.horizontalAndVerticallyAligned,
+                        sharedStyles.flexShrink0,
+                      ]}
+                    >
+                      <Spacer width={contentPadding / 2} />
+
+                      <Link
+                        TouchableComponent={GestureHandlerTouchableOpacity}
+                        enableUnderlineHover
+                        href="javascript:void(0)"
+                        openOnNewTab={false}
+                        onPress={() => {
                           vibrateHapticFeedback()
 
                           const removeIfAlreadySet = !(
@@ -434,105 +532,34 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
                           )
 
                           dispatch(
-                            actions.changeIssueNumberFilter({
+                            actions.setColumnReasonFilter({
                               columnId,
-                              issueNumber,
+                              reason: reason.reason,
+                              value: KeyboardKeyIsPressed.alt ? false : true,
                               removeIfAlreadySet,
                               removeOthers,
-                              value: KeyboardKeyIsPressed.alt ? false : true,
                             }),
                           )
-                        }
-                      }
-
-                      return () => {
-                        vibrateHapticFeedback()
-
-                        dispatch(
-                          actions.setColumnRepoFilter({
-                            columnId,
-                            owner: text!.repo!.owner,
-                            repo: text!.repo!.name,
-                            value: KeyboardKeyIsPressed.alt ? false : true,
-                            // removeIfAlreadySet,
-                            // removeOthers,
-                          }),
-                        )
-                      }
-                    })()}
-                    style={sharedStyles.flexShrink1}
-                    textProps={{
-                      color: 'foregroundColorMuted65',
-                      numberOfLines: 1,
-                      style: styles.text,
-                    }}
-                  >
-                    {text.text}
-                  </Link>
-                ) : (
-                  <ThemedText
-                    color="foregroundColorMuted65"
-                    numberOfLines={1}
-                    style={[styles.text, sharedStyles.flexShrink1]}
-                  >
-                    {text.text}
-                  </ThemedText>
-                )}
-
-                {!!(reason && reason.label && columnId) && (
-                  <View
-                    style={[
-                      sharedStyles.horizontalAndVerticallyAligned,
-                      sharedStyles.flexShrink0,
-                    ]}
-                  >
-                    <Link
-                      TouchableComponent={GestureHandlerTouchableOpacity}
-                      enableUnderlineHover
-                      href="javascript:void(0)"
-                      openOnNewTab={false}
-                      onPress={() => {
-                        vibrateHapticFeedback()
-
-                        const removeIfAlreadySet = !(
-                          KeyboardKeyIsPressed.meta ||
-                          KeyboardKeyIsPressed.shift
-                        )
-
-                        const removeOthers = !(
-                          KeyboardKeyIsPressed.alt ||
-                          KeyboardKeyIsPressed.meta ||
-                          KeyboardKeyIsPressed.shift
-                        )
-
-                        dispatch(
-                          actions.setColumnReasonFilter({
-                            columnId,
-                            reason: reason.reason,
-                            value: KeyboardKeyIsPressed.alt ? false : true,
-                            removeIfAlreadySet,
-                            removeOthers,
-                          }),
-                        )
-                      }}
-                      style={sharedStyles.flexShrink0}
-                      textProps={{
-                        color: 'foregroundColorMuted65',
-                        numberOfLines: 1,
-                        style: [
-                          styles.reason,
-                          { minWidth: reason.label.length * 7 },
-                        ],
-                      }}
-                      {...Platform.select({
-                        web: { title: reason.tooltip },
-                      })}
-                    >
-                      {reason.label.toLowerCase()}
-                    </Link>
-                  </View>
-                )}
-              </View>
+                        }}
+                        style={sharedStyles.flexShrink0}
+                        textProps={{
+                          color: 'foregroundColorMuted65',
+                          numberOfLines: 1,
+                          style: [
+                            styles.reason,
+                            { minWidth: reason.label.length * 7 },
+                          ],
+                        }}
+                        {...Platform.select({
+                          web: { title: reason.tooltip },
+                        })}
+                      >
+                        {reason.label.toLowerCase()}
+                      </Link>
+                    </View>
+                  )}
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -695,7 +722,14 @@ export const BaseCard = React.memo((props: BaseCardProps) => {
         <Spacer flex={1} />
       </View>
 
-      <CardItemSeparator muted={isMuted} />
+      <CardItemSeparator
+        leftOffset={
+          sizes.cardPaddingHorizontal +
+          sizes.avatarContainerWidth +
+          sizes.horizontalSpaceSize
+        }
+        muted={isMuted}
+      />
     </View>
   )
 })

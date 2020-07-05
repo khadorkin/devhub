@@ -1,6 +1,6 @@
 {
   "name": "devhub",
-  "version": "0.100.2",
+  "version": "0.101.0",
   "private": true,
   "author": {
     "name": "Bruno Lemos",
@@ -24,7 +24,7 @@
     "clean": "yarn workspaces run clean",
     "dev": "yarn workspace @devhub/desktop compile && concurrently --kill-others \"yarn workspace @devhub/desktop compile -w\" \"yarn workspace @devhub/web start\" \"yarn workspace @devhub/mobile start\" \"wait-on http://localhost:3000 && yarn workspace @devhub/desktop start\"",
     "dev:desktop": "cross-env BROWSER=none concurrently \"yarn dev:web\" \"yarn workspace @devhub/desktop compile -w\" \"wait-on http://localhost:3000 && yarn workspace @devhub/desktop start\"",
-    "dev:landing": "cd ./landing && yarn start && cd -",
+    "dev:landing": "yarn workspace @devhub/web compile && concurrently --kill-others \"yarn workspace @devhub/web compile -w\" \"cd ./landing && yarn start && cd -\"",
     "dev:mobile": "yarn workspace @devhub/mobile compile && concurrently --kill-others \"yarn workspace @devhub/mobile compile -w\" \"yarn workspace @devhub/mobile start\"",
     "dev:web": "yarn workspace @devhub/web compile && concurrently --kill-others \"yarn workspace @devhub/web compile -w\" \"yarn workspace @devhub/web start\"",
     "format": "yarn workspaces run format",
@@ -36,9 +36,10 @@
     "xcode": "yarn workspace @devhub/mobile xcode"
   },
   "dependencies": {
-    "react-native": "0.61.5"
+    "react-native": "0.63.0-rc.1"
   },
   "devDependencies": {
+    "@primer/octicons-v2": "canary",
     "concurrently": "4.1.0",
     "cross-env": "5.2.0",
     "husky": "1.3.1",
@@ -55,7 +56,7 @@
     "typescript": "3.7.5"
   },
   "resolutions": {
-    "@types/react": "16.9.15"
+    "@types/react": "16.9.35"
   },
   "husky": {
     "hooks": {

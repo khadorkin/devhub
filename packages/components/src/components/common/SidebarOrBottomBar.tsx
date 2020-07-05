@@ -3,7 +3,6 @@ import {
   getColumnOption,
   getUserAvatarByUsername,
   getUserURLFromLogin,
-  GitHubIcon,
   isItemRead,
   isPlanStatusValid,
   ModalPayload,
@@ -39,12 +38,14 @@ import { useReduxState } from '../../hooks/use-redux-state'
 import { emitter } from '../../libs/emitter'
 import { Platform } from '../../libs/platform'
 import { useSafeArea } from '../../libs/safe-area-view'
+import { IconProp } from '../../libs/vector-icons'
 import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
 import {
   contentPadding,
   mutedOpacity,
+  scaleFactor,
   smallerTextSize,
 } from '../../styles/variables'
 import {
@@ -73,18 +74,18 @@ export interface SidebarOrBottomBarProps {
   type: 'sidebar' | 'bottombar'
 }
 
-export const sidebarIconSize = 20
+export const sidebarIconSize = 20 * scaleFactor
 export const sidebarAvatarSize = sidebarIconSize
 export const sidebarUnreadIndicatorSize = defaultUnreadIndicatorSize
 export const sidebarItemHeight = sidebarIconSize + (contentPadding * 3) / 2
-export const sidebarWidth = 50
+export const sidebarWidth = 50 * scaleFactor
 
-export const bottomBarIconSize = 20
+export const bottomBarIconSize = 20 * scaleFactor
 export const bottomBarAvatarSize = bottomBarIconSize
 export const bottomBarLabelSize = smallerTextSize - 2
 export const bottomBarUnreadIndicatorSize = defaultUnreadIndicatorSize
 export const bottomBarItemWidth =
-  sidebarIconSize + (contentPadding * 3) / 2 + 16
+  sidebarIconSize + (contentPadding * 3) / 2 + 16 * scaleFactor
 export const bottomBarLabelContainerHeight =
   bottomBarLabelSize + contentPadding / 3
 export const bottomBarHeight = 50 + bottomBarLabelContainerHeight
@@ -336,7 +337,7 @@ export const SidebarOrBottomBar = React.memo(
       () => (
         <SidebarOrBottomBarItem
           horizontal={horizontal}
-          icon="gear"
+          icon={{ family: 'octicon', name: 'settings' }}
           onPress={() =>
             small &&
             currentOpenedModal &&
@@ -502,7 +503,7 @@ export const SidebarOrBottomBar = React.memo(
             {!(horizontal && shouldRenderFAB({ sizename })) && (
               <SidebarOrBottomBarItem
                 horizontal={horizontal}
-                icon="plus"
+                icon={{ family: 'octicon', name: 'plus' }}
                 onPress={() =>
                   dispatch(actions.replaceModal({ name: 'ADD_COLUMN' }))
                 }
@@ -599,7 +600,12 @@ export const SidebarOrBottomBarColumnItem = React.memo(
         }
 
       return {
-        icon: (headerDetails && headerDetails.icon) || 'mark-github',
+        icon:
+          (headerDetails && headerDetails.icon) ||
+          ({
+            family: 'octicon',
+            name: 'mark-github',
+          } as IconProp),
       }
     }, [
       headerDetails &&
@@ -676,7 +682,7 @@ export const SidebarOrBottomBarColumnItem = React.memo(
     return (
       <SidebarOrBottomBarItem
         key={`sidebar-or-bottom-bar-column-item-${columnId}-inner`}
-        {...avatarAndIconProps}
+        {...(avatarAndIconProps as any)}
         columnId={columnId}
         horizontal={horizontal}
         hoverListRef={hoverListRef}
@@ -708,7 +714,7 @@ export type SidebarOrBottomBarItemProps = {
   | { columnId?: string; onPress?: () => void }) &
   (
     | ({ children: React.ReactNode; icon?: undefined; avatar?: undefined })
-    | ({ children?: undefined; icon: GitHubIcon; avatar?: undefined })
+    | ({ children?: undefined; icon: IconProp; avatar?: undefined })
     | ({ children?: undefined; avatar: string; icon?: undefined }))
 
 export const SidebarOrBottomBarItem = React.memo(
@@ -885,8 +891,8 @@ export const SidebarOrBottomBarItem = React.memo(
               />
             ) : icon ? (
               <ThemedIcon
+                {...icon}
                 color="foregroundColor"
-                name={icon}
                 style={styles.icon}
               />
             ) : null}

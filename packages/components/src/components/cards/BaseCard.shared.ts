@@ -33,7 +33,6 @@ import {
   getUserAvatarFromObject,
   getUserURLFromEmail,
   getUserURLFromObject,
-  GitHubIcon,
   GitHubIssueOrPullRequest,
   GitHubPullRequest,
   GitHubPushEvent,
@@ -51,6 +50,7 @@ import {
 import { PixelRatio } from 'react-native'
 
 import { Platform } from '../../libs/platform'
+import { IconProp } from '../../libs/vector-icons'
 import * as actions from '../../redux/actions'
 import { betterMemoize } from '../../redux/selectors/helpers'
 import { ExtractActionFromActionCreator } from '../../redux/types/base'
@@ -58,6 +58,7 @@ import {
   avatarSize,
   contentPadding,
   normalTextSize,
+  scaleFactor,
   smallAvatarSize,
   smallerTextSize,
   smallTextSize,
@@ -71,13 +72,14 @@ import { cardItemSeparatorSize } from './partials/CardItemSeparator'
 // only via the usePlans hook
 const cheapestPlanWithNotifications: Plan | undefined = undefined
 
-const _iconSize = smallAvatarSize - 4
+const _iconSize = smallAvatarSize - 4 * scaleFactor
 const _iconContainerSize = smallAvatarSize
 const _actionFontSize = smallerTextSize
 const _subitemFontSize = smallTextSize
-const _subitemLineHeight = _subitemFontSize + 2
+const _subitemLineHeight = _subitemFontSize + 2 * scaleFactor
 export const sizes = {
-  cardPadding: contentPadding * (2 / 3),
+  cardPaddingVertical: contentPadding,
+  cardPaddingHorizontal: contentPadding / 2,
   iconSize: PixelRatio.roundToNearestPixel(_iconSize),
   iconContainerSize: _iconContainerSize,
   avatarContainerWidth: PixelRatio.roundToNearestPixel(
@@ -94,8 +96,9 @@ export const sizes = {
     smallAvatarSize,
   ),
   horizontalSpaceSize: contentPadding / 2,
-  rightInnerTopSpacing: 0,
-  rightTextLineHeight: normalTextSize + 6,
+  titleLineHeight: normalTextSize * 1.2,
+  subtitleLineHeight: smallerTextSize * 1.2,
+  textLineHeight: smallerTextSize * 1.2,
   verticalSpaceSize: contentPadding / 2,
 }
 
@@ -126,10 +129,7 @@ export interface BaseCardProps extends AdditionalCardProps {
     repoId?: number | string | undefined
     text?: string
   }
-  icon: {
-    name: GitHubIcon
-    color?: keyof ThemeColors
-  }
+  icon: IconProp
   isRead: boolean
   isSaved: boolean
   labels:
@@ -210,7 +210,7 @@ function getPrivateBannerCardProps(
     avatar: props.avatar,
     date: props.date,
     githubApp: undefined,
-    icon: { color: props.iconColor || 'red', name: 'lock' },
+    icon: { color: props.iconColor || 'red', family: 'octicon', name: 'lock' },
     isRead: isItemRead(item),
     isSaved: isItemSaved(item),
     labels: undefined,
@@ -315,7 +315,7 @@ function _getCardPropsForItem(
         .toLowerCase()}${_actionText.substr(1)}`
 
       const iconDetails = getEventIconAndColor(event)
-      const icon = { name: iconDetails.icon, color: iconDetails.color }
+      const icon = iconDetails as IconProp
 
       const repoURL = fixURL(
         repos[0].html_url || getRepoUrlFromOtherUrl(repos[0].url),
@@ -855,7 +855,7 @@ function _getCardPropsForItem(
       const date =
         issueOrPullRequest.updated_at || issueOrPullRequest.created_at
 
-      const icon = { name: iconDetails.icon, color: iconDetails.color }
+      const icon = iconDetails as IconProp
 
       if (isPrivate && !canSee) {
         return getPrivateBannerCardProps(type, item, {
@@ -917,7 +917,7 @@ function _getCardPropsForItem(
         notification,
         (issueOrPullRequest || undefined) as any,
       )
-      const icon = { name: iconDetails.icon, color: iconDetails.color }
+      const icon = iconDetails as IconProp
 
       const subitems = ((): BaseCardProps['subitems'] => {
         if (!(_comment && _comment.body)) return undefined
@@ -1218,30 +1218,33 @@ export function getCardSizeForProps(
 ): number {
   if (!props) return 0
 
-  return (
-    sizes.cardPadding * 2 +
-    Math.max(
-      sizes.avatarContainerHeight,
-      sizes.rightInnerTopSpacing +
-        (props.title ? sizes.rightTextLineHeight : 0) +
-        (props.subtitle ? sizes.rightTextLineHeight : 0) +
-        (props.text && props.text.text ? sizes.rightTextLineHeight : 0),
-    ) +
-    (props.action && props.action.text
-      ? sizes.actionContainerHeight + sizes.verticalSpaceSize
-      : 0) +
-    (props.labels && props.labels.length
-      ? smallLabelHeight + sizes.verticalSpaceSize
-      : 0) +
-    (props.subitems && props.subitems.length
-      ? props.subitems.length *
-        (sizes.subitemContainerHeight + sizes.verticalSpaceSize)
-      : 0) +
-    (props.githubApp
-      ? sizes.githubAppMessageContainerHeight + sizes.verticalSpaceSize
-      : 0) +
-    (renderCardActions ? cardActionsHeight + sizes.verticalSpaceSize : 0) +
-    cardItemSeparatorSize
+  return PixelRatio.roundToNearestPixel(
+    sizes.cardPaddingVertical * 2 +
+      Math.max(
+        sizes.avatarContainerHeight,
+        (props.title ? sizes.titleLineHeight : 0) +
+          (props.subtitle
+            ? sizes.subtitleLineHeight + sizes.verticalSpaceSize
+            : 0) +
+          (props.text && props.text.text
+            ? sizes.textLineHeight + sizes.verticalSpaceSize
+            : 0),
+      ) +
+      (props.action && props.action.text
+        ? sizes.actionContainerHeight + sizes.verticalSpaceSize
+        : 0) +
+      (props.labels && props.labels.length
+        ? smallLabelHeight + sizes.verticalSpaceSize
+        : 0) +
+      (props.subitems && props.subitems.length
+        ? props.subitems.length *
+          (sizes.subitemContainerHeight + sizes.verticalSpaceSize)
+        : 0) +
+      (props.githubApp
+        ? sizes.githubAppMessageContainerHeight + sizes.verticalSpaceSize
+        : 0) +
+      (renderCardActions ? cardActionsHeight + sizes.verticalSpaceSize : 0) +
+      cardItemSeparatorSize,
   )
 }
 
@@ -1284,7 +1287,7 @@ export function getCardPushNotificationItem(
     },
   }
 
-  const notificationSize = 100
+  const githubAvatarSize = 100
 
   switch (column.type) {
     case 'activity': {
@@ -1390,12 +1393,12 @@ export function getCardPushNotificationItem(
           (_comment &&
             getUserAvatarFromObject(
               _comment.user,
-              { size: notificationSize },
+              { size: githubAvatarSize },
               PixelRatio.getPixelSizeForLayoutSize,
             )) ||
           getUserAvatarByAvatarURL(
             cardProps.avatar.imageURL,
-            { size: notificationSize },
+            { size: githubAvatarSize },
             PixelRatio.getPixelSizeForLayoutSize,
           ),
         onClickDispatchAction,
@@ -1438,7 +1441,7 @@ export function getCardPushNotificationItem(
           .join('\n'),
         imageURL: getUserAvatarByAvatarURL(
           cardProps.avatar.imageURL,
-          { size: notificationSize },
+          { size: githubAvatarSize },
           PixelRatio.getPixelSizeForLayoutSize,
         ),
         onClickDispatchAction,
@@ -1488,12 +1491,12 @@ export function getCardPushNotificationItem(
           (_comment &&
             getUserAvatarFromObject(
               _comment.user,
-              { size: notificationSize },
+              { size: githubAvatarSize },
               PixelRatio.getPixelSizeForLayoutSize,
             )) ||
           getUserAvatarByAvatarURL(
             cardProps.avatar.imageURL,
-            { size: notificationSize },
+            { size: githubAvatarSize },
             PixelRatio.getPixelSizeForLayoutSize,
           ),
         onClickDispatchAction,

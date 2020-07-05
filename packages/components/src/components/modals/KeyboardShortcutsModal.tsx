@@ -7,7 +7,11 @@ export interface KeyboardShortcutsModalProps {
 }
 
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding, smallTextSize } from '../../styles/variables'
+import {
+  contentPadding,
+  scaleFactor,
+  smallTextSize,
+} from '../../styles/variables'
 import { ModalColumn } from '../columns/ModalColumn'
 import { Spacer } from '../common/Spacer'
 import { ThemedText } from '../themed/ThemedText'
@@ -42,7 +46,19 @@ export const keyboardShortcutsById = {
   },
   selectNextColumn: { keys: ['→', 'L'], description: 'Select next column' },
   toggleRead: { keys: ['R'], description: 'Mark item as read/unread' },
-  toggleSave: { keys: ['S'], description: 'Toggle save item for later' },
+  toggleReadAllFromColumn: {
+    keys: ['Shift R'],
+    description: 'Mark column as read/unread',
+  },
+  markEverythingAsDone: {
+    keys: ['Shift Esc'],
+    description: 'Mark all columns as done',
+  },
+  toggleSave: { keys: ['S'], description: 'Save/unsave item' },
+  toggleDoneAllFromColumn: {
+    keys: ['Shift D'],
+    description: 'Mark column as done/undone',
+  },
   moveColumnLeft: {
     keys: ['Alt ←', 'Alt ↑'],
     description: 'Move column to the left',
@@ -77,7 +93,10 @@ export const keyboardShortcuts = [
   keyboardShortcutsById.selectPreviousColumn,
   keyboardShortcutsById.selectNextColumn,
   keyboardShortcutsById.toggleRead,
+  keyboardShortcutsById.toggleReadAllFromColumn,
+  keyboardShortcutsById.markEverythingAsDone,
   keyboardShortcutsById.toggleSave,
+  keyboardShortcutsById.toggleDoneAllFromColumn,
   keyboardShortcutsById.moveColumnLeft,
   keyboardShortcutsById.moveColumnRight,
   keyboardShortcutsById.focusNextDom,
@@ -130,7 +149,7 @@ export function KeyboardShortcutsModal(props: KeyboardShortcutsModalProps) {
                 color="foregroundColor"
                 style={{
                   marginBottom: contentPadding,
-                  lineHeight: 16,
+                  lineHeight: 16 * scaleFactor,
                 }}
               >
                 {ks.description}

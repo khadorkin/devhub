@@ -62,7 +62,16 @@ export default function Header(props: HeaderProps) {
 
             <HeaderLink
               className={twClasses.headerLink__rightMargin}
-              href="https://twitter.com/devhub_app/"
+              href="https://github.com/devhubapp/devhub"
+              target="_blank"
+              rel="noopener"
+            >
+              GitHub ↗
+            </HeaderLink>
+
+            <HeaderLink
+              className={twClasses.headerLink__rightMargin}
+              href="https://twitter.com/devhub_app"
               target="_blank"
               rel="noopener"
             >
@@ -106,21 +115,12 @@ export default function Header(props: HeaderProps) {
               </HeaderLink>
             )}
 
-            {authData && authData.appToken ? (
-              <HeaderLink
-                href="/account"
-                className={twClasses.headerLink__rightMargin}
-              >
-                My account
-              </HeaderLink>
-            ) : (
-              <HeaderLink
-                href="/account?autologin"
-                className={twClasses.headerLink__rightMargin}
-              >
-                Login
-              </HeaderLink>
-            )}
+            <HeaderLink
+              href="/account"
+              className={twClasses.headerLink__rightMargin}
+            >
+              My account
+            </HeaderLink>
 
             <span className="pr-2" />
 

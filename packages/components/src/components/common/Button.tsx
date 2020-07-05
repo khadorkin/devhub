@@ -1,11 +1,11 @@
 import { ThemeColors } from '@devhub/core'
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View, ViewProps } from 'react-native'
 
 import { useHover } from '../../hooks/use-hover'
 import { Platform } from '../../libs/platform'
 import { sharedStyles } from '../../styles/shared'
-import { normalTextSize, radius } from '../../styles/variables'
+import { normalTextSize, radius, scaleFactor } from '../../styles/variables'
 import { getTheme } from '../context/ThemeContext'
 import { getThemeColorOrItself } from '../themed/helpers'
 import {
@@ -20,6 +20,7 @@ import {
 import { ThemedView } from '../themed/ThemedView'
 
 export type ButtonProps = Omit<ThemedTouchableHighlightProps, 'children'> & {
+  autoFocus?: boolean
   children:
     | React.ReactNode
     | ((colors: { foregroundThemeColor: keyof ThemeColors }) => React.ReactNode)
@@ -50,10 +51,11 @@ export type ButtonProps = Omit<ThemedTouchableHighlightProps, 'children'> & {
         }
       })
 
-export const defaultButtonSize = 40
+export const defaultButtonSize = 40 * scaleFactor
 
 export function Button(props: ButtonProps) {
   const {
+    autoFocus,
     children,
     colors,
     contentContainerStyle,
@@ -140,6 +142,11 @@ export function Button(props: ButtonProps) {
     ),
   )
 
+  useEffect(() => {
+    if (autoFocus && innerTouchableRef.current)
+      innerTouchableRef.current.focus()
+  }, [autoFocus])
+
   return (
     <ThemedView
       ref={containerViewRef}
@@ -161,6 +168,7 @@ export function Button(props: ButtonProps) {
       <>
         <ThemedTouchableHighlight
           ref={innerTouchableRef}
+          accessibilityRole="button"
           backgroundColor={undefined}
           underlayColor={backgroundHoverThemeColor}
           {...otherProps}
@@ -273,7 +281,7 @@ const styles = StyleSheet.create({
   },
 
   text: {
-    lineHeight: normalTextSize + 4,
+    lineHeight: normalTextSize + 4 * scaleFactor,
     fontSize: normalTextSize,
     fontWeight: '600',
     textAlign: 'center',

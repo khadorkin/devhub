@@ -4,8 +4,9 @@ import { View, ViewStyle } from 'react-native'
 import { useDynamicRef } from '../../hooks/use-dynamic-ref'
 import { useHover } from '../../hooks/use-hover'
 import { Platform } from '../../libs/platform'
+import { IconProp } from '../../libs/vector-icons'
 import { sharedStyles } from '../../styles/shared'
-import { contentPadding } from '../../styles/variables'
+import { contentPadding, scaleFactor } from '../../styles/variables'
 import { AccordionView } from '../common/AccordionView'
 import { ConditionalWrap } from '../common/ConditionalWrap'
 import { Separator } from '../common/Separator'
@@ -15,7 +16,7 @@ import {
   TouchableOpacityProps,
 } from '../common/TouchableOpacity'
 import { getTheme } from '../context/ThemeContext'
-import { ThemedIcon, ThemedIconProps } from '../themed/ThemedIcon'
+import { ThemedIcon } from '../themed/ThemedIcon'
 import { ThemedText } from '../themed/ThemedText'
 import { ThemedView } from '../themed/ThemedView'
 import {
@@ -33,7 +34,7 @@ export interface ColumnOptionsRowProps {
   hasChanged: boolean
   headerItemFixedIconSize?: number
   hideSeparator?: boolean
-  icon: Pick<ThemedIconProps, 'family' | 'name'>
+  icon: IconProp
   isOpen: boolean
   onToggle: (() => void) | undefined
   openOnHover?: boolean
@@ -143,12 +144,11 @@ export function ColumnOptionsRow(props: ColumnOptionsRowProps) {
           ]}
         >
           <ThemedIcon
+            {...icon}
             color="foregroundColor"
-            family={icon.family as any}
-            name={icon.name as any}
             selectable={false}
             style={{
-              lineHeight: 22,
+              lineHeight: 22 * scaleFactor,
               width: headerItemFixedIconSize,
               fontSize: headerItemFixedIconSize,
               textAlign: 'center',
@@ -177,7 +177,9 @@ export function ColumnOptionsRow(props: ColumnOptionsRowProps) {
                   : 'foregroundColorMuted65'
               }
               numberOfLines={1}
-              style={{ fontSize: subtitle ? 12 : 10 }}
+              style={{
+                fontSize: subtitle ? 12 * scaleFactor : 10 * scaleFactor,
+              }}
             >
               {subtitle || '●'}
             </ThemedText>
@@ -191,6 +193,7 @@ export function ColumnOptionsRow(props: ColumnOptionsRowProps) {
 
               <ThemedIcon
                 color="foregroundColor"
+                family="octicon"
                 name={isOpen ? 'chevron-up' : 'chevron-down'}
                 selectable={false}
                 style={{

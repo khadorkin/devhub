@@ -1,11 +1,12 @@
 import React from 'react'
 import { StyleSheet, TextProps, View } from 'react-native'
 
-import { GitHubIcon } from '@devhub/core'
+import { IconProp } from '../../libs/vector-icons'
 import { sharedStyles } from '../../styles/shared'
 import {
   contentPadding,
   normalTextSize,
+  scaleFactor,
   smallerTextSize,
 } from '../../styles/variables'
 import { Button, ButtonProps } from '../common/Button'
@@ -17,10 +18,10 @@ import { Spacer } from './Spacer'
 export interface GitHubLoginButtonProps
   extends Omit<ButtonProps, 'children' | 'colors' | 'onPress'> {
   horizontal?: boolean
-  leftIcon?: GitHubIcon
+  leftIcon?: IconProp
   loading?: boolean
   onPress: () => void
-  rightIcon?: GitHubIcon
+  rightIcon?: IconProp
   subtitle?: string
   textProps?: TextProps
   title?: string
@@ -42,23 +43,23 @@ const styles = StyleSheet.create({
 
   titleText: {
     fontWeight: '600',
-    fontSize: normalTextSize + 1,
-    lineHeight: normalTextSize + 6,
+    fontSize: normalTextSize + 1 * scaleFactor,
+    lineHeight: normalTextSize + 6 * scaleFactor,
     textAlign: 'center',
   },
 
   subtitleText: {
     fontWeight: '400',
     fontSize: smallerTextSize,
-    lineHeight: smallerTextSize + 4,
+    lineHeight: smallerTextSize + 4 * scaleFactor,
     textAlign: 'center',
   },
 })
 
 export function GitHubLoginButton(props: GitHubLoginButtonProps) {
   const {
-    leftIcon = 'mark-github',
-    rightIcon = '',
+    leftIcon,
+    rightIcon,
     subtitle = '',
     textProps = {},
     title = '',
@@ -72,17 +73,17 @@ export function GitHubLoginButton(props: GitHubLoginButtonProps) {
       {...({ type: 'primary' } as any)}
       {...otherProps}
       contentContainerStyle={styles.contentContainer}
-      size={50}
+      size={50 * scaleFactor}
       style={[styles.button, sizename === '1-small' && { width: '100%' }]}
     >
       {({ foregroundThemeColor }) => (
         <>
-          {!!leftIcon && (
+          {!!(leftIcon && leftIcon.name) && (
             <>
               <ThemedIcon
+                {...leftIcon}
                 color={foregroundThemeColor}
-                name={leftIcon}
-                size={20}
+                size={20 * scaleFactor}
               />
 
               <Spacer width={contentPadding / 2} />
@@ -111,19 +112,15 @@ export function GitHubLoginButton(props: GitHubLoginButtonProps) {
             )}
           </View>
 
-          {!!rightIcon && (
+          {!!(rightIcon && rightIcon.name) && (
             <>
-              {!!rightIcon && (
-                <>
-                  <Spacer width={contentPadding / 2} />
+              <Spacer width={contentPadding / 2} />
 
-                  <ThemedIcon
-                    color={foregroundThemeColor}
-                    name={rightIcon}
-                    size={20}
-                  />
-                </>
-              )}
+              <ThemedIcon
+                {...rightIcon}
+                color={foregroundThemeColor}
+                size={20 * scaleFactor}
+              />
             </>
           )}
         </>

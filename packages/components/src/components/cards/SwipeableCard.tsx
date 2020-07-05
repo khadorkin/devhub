@@ -18,8 +18,9 @@ export function SwipeableCard(props: CardWithLinkProps) {
   const dispatch = useDispatch()
   const item = useItem(nodeIdOrId)
   const isRead = isItemRead(item)
+  const isSaved = isItemSaved(item)
 
-  function handleMarkAsRead() {
+  function handleMarkAsReadOrUnread() {
     dispatch(
       actions.markItemsAsReadOrUnread({
         type,
@@ -52,40 +53,42 @@ export function SwipeableCard(props: CardWithLinkProps) {
       ref={swipeableRef}
       leftActions={[
         {
-          ...(!isRead
+          key: 'read',
+          onPress: handleMarkAsReadOrUnread,
+          ...(isRead
             ? {
-                backgroundColor: theme.backgroundColorDarker2,
-                foregroundColor: theme.foregroundColor,
-              }
-            : {
                 backgroundColor: theme.primaryBackgroundColor,
                 foregroundColor: theme.primaryForegroundColor,
+                icon: { family: 'octicons', name: 'eye-closed' },
+                label: 'Unread',
+                type: 'FULL',
+              }
+            : {
+                backgroundColor: theme.backgroundColorDarker2,
+                foregroundColor: theme.foregroundColor,
+                icon: { family: 'octicons', name: 'eye' },
+                label: 'Read',
+                type: 'FULL',
               }),
-          iconFamily: 'octicons',
-          icon: isRead ? 'primitive-dot' : 'mail-read',
-          key: 'read',
-          label: 'Read',
-          onPress: handleMarkAsRead,
-          type: 'FULL',
         },
       ]}
       rightActions={[
         {
-          ...(isItemSaved(item)
+          key: 'bookmark',
+          onPress: handleSave,
+          backgroundColor: theme.orange,
+          foregroundColor: theme.primaryForegroundColor,
+          ...(isSaved
             ? {
-                backgroundColor: theme.backgroundColorDarker2,
-                foregroundColor: theme.foregroundColor,
+                icon: { family: 'octicon', name: 'bookmark-slash-fill' },
+                type: 'FULL',
+                label: 'Unsave',
               }
             : {
-                backgroundColor: theme.primaryBackgroundColor,
-                foregroundColor: theme.primaryForegroundColor,
+                icon: { family: 'octicon', name: 'bookmark-fill' },
+                type: 'FULL',
+                label: 'Save',
               }),
-          iconFamily: 'material',
-          icon: 'bookmark',
-          key: 'bookmark',
-          label: 'Bookmark',
-          onPress: handleSave,
-          type: 'FULL',
         },
       ]}
     >
