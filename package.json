@@ -45,15 +45,15 @@
     "husky": "1.3.1",
     "jetifier": "1.6.4",
     "lint-staged": "8.1.5",
-    "now": "18.0.0",
+    "now": "19.2.0",
     "patch-package": "6.0.5",
     "postinstall-prepare": "1.0.1",
-    "prettier": "1.16.4",
+    "prettier": "2.0.5",
     "shx": "0.3.2",
-    "tslint": "5.20.1",
+    "tslint": "6.1.3",
     "tslint-config-prettier": "1.18.0",
     "tslint-react": "4.1.0",
-    "typescript": "3.7.5"
+    "typescript": "3.9.7"
   },
   "resolutions": {
     "@types/react": "16.9.35"
