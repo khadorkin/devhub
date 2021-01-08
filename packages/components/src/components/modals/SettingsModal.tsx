@@ -38,7 +38,7 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
   const { showBackButton } = props
 
   const { sizename } = useAppLayout()
-  const { freePlan } = usePlans()
+  const { freePlan, paidPlans } = usePlans()
 
   const dispatch = useDispatch()
   const appToken = useReduxState(selectors.appTokenSelector)
@@ -65,7 +65,8 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
     >
       <>
         {Platform.OS === 'web' &&
-          !(userPlan && userPlan.status === 'active' && !userPlan.interval) && (
+          !(userPlan?.status === 'active' && !userPlan.interval) &&
+          !(userPlan?.id === 'free' && !paidPlans.length) && (
             <View>
               <SubHeader title="Current plan">
                 <Spacer flex={1} />
@@ -87,7 +88,7 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
                         ? userPlan.label || (userPlan.amount ? 'Paid' : 'Free')
                         : 'None'
                     }${
-                      isPlanExpired
+                      isPlanExpired && paidPlans.length
                         ? ' (expired)'
                         : userPlan && userPlan.status === 'trialing'
                         ? (userPlan.label || '').toLowerCase().includes('trial')
@@ -103,7 +104,8 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
                     } ↗`}</ThemedText>
                     {!!(
                       (isPlanExpired &&
-                        !(freePlan && !freePlan.trialPeriodDays)) ||
+                        !(freePlan && !freePlan.trialPeriodDays) &&
+                        paidPlans.length) ||
                       (userPlan &&
                         userPlan.status === 'active' &&
                         userPlan.cancelAtPeriodEnd &&
@@ -204,6 +206,7 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
                 Twitter
               </Link>
 
+              {/*
               <ThemedText
                 color="foregroundColorMuted25"
                 style={{
@@ -231,6 +234,7 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
               >
                 Slack
               </Link>
+              */}
 
               <ThemedText
                 color="foregroundColorMuted25"
@@ -258,6 +262,32 @@ export const SettingsModal = React.memo((props: SettingsModalProps) => {
                 }}
               >
                 GitHub
+              </Link>
+            </View>
+          </SubHeader>
+        </View>
+
+        <View style={{ minHeight: 32 * scaleFactor }}>
+          <SubHeader title="Follow me on Twitter">
+            <Spacer flex={1} />
+
+            <View style={sharedStyles.horizontal}>
+              <Link
+                analyticsCategory="preferences_link"
+                analyticsLabel="twitter"
+                enableForegroundHover
+                href="https://twitter.com/brunolemos"
+                openOnNewTab
+                textProps={{
+                  color: 'foregroundColor',
+                  style: {
+                    fontSize: normalTextSize,
+                    lineHeight: normalTextSize * 1.5,
+                    textAlign: 'center',
+                  },
+                }}
+              >
+                @brunolemos
               </Link>
             </View>
           </SubHeader>

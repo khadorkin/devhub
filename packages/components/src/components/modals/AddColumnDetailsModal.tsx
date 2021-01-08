@@ -209,7 +209,7 @@ export const AddColumnDetailsModal = React.memo(
             loggedUsername,
             subscription,
           })
-          dialogRef.current!.show('Something went wrong.', errorMessage)
+          dialogRef.current?.show('Something went wrong.', errorMessage)
 
           return
         }
@@ -284,7 +284,7 @@ export const AddColumnDetailsModal = React.memo(
     })
 
     useEffect(() => {
-      formikProps.validateForm()
+      void formikProps.validateForm()
     }, [])
 
     function shouldShowError(formItem: FormItem) {
@@ -315,7 +315,7 @@ export const AddColumnDetailsModal = React.memo(
     }) {
       if (!shouldShowError(name)) return null
 
-      let error = formikProps.errors[name]!
+      let error = formikProps.errors[name]
       if (error === 'Required' && required === false) error = 'Empty'
 
       if (error === CIRCLE_CHARACTER) {
@@ -357,7 +357,7 @@ export const AddColumnDetailsModal = React.memo(
                     family="octicon"
                     name={isPrivateSupported ? 'lock' : 'globe'}
                     onPress={() => {
-                      dialogRef.current!.show(
+                      dialogRef.current?.show(
                         isPrivateSupported
                           ? 'Private support'
                           : 'No private support',
@@ -531,7 +531,7 @@ export const AddColumnDetailsModal = React.memo(
             <View key={`add-column-details-form-item-${formItem}`}>
               {renderFormItemHeader(formItem, 'Username', { required })}
               {renderUserFormField(required, {
-                placeholder: `E.g.: ${loggedUsername}`,
+                placeholder: `E.g.: ${loggedUsername || 'brunolemos'}`,
               })}
             </View>
           )
@@ -557,7 +557,7 @@ export const AddColumnDetailsModal = React.memo(
 
             if (!content) {
               if (__DEV__) {
-                // tslint:disable-next-line no-console
+                // eslint-disable-next-line no-console
                 console.warn(
                   `[AddColumnDetailsModal] No form defined for "${formItem}"`,
                 )
@@ -593,13 +593,13 @@ export const AddColumnDetailsModal = React.memo(
       blurOnSubmit: false,
       placeholder: '',
       onSubmitEditing: () => {
-        formikProps.submitForm()
+        void formikProps.submitForm()
       },
     }
 
     function renderGenericFormTextInput<F extends FormItem>(
       formItem: F,
-      required: boolean = true,
+      required = true,
       textInputProps: Partial<ThemedTextInputProps> = {},
     ) {
       const errorColor = getErrorColor({ required })
@@ -621,7 +621,7 @@ export const AddColumnDetailsModal = React.memo(
           onChangeText={(value) => {
             formikProps.setFieldValue(formItem, value)
           }}
-          value={`${formikProps.values[formItem] || ''}`}
+          value={`${formikProps.values[formItem]?.toString() || ''}`}
           {...textInputProps}
         />
       )
@@ -642,7 +642,7 @@ export const AddColumnDetailsModal = React.memo(
       textInputProps: Partial<ThemedTextInputProps> = {},
     ) {
       return renderGenericFormTextInput('owner', required, {
-        placeholder: `E.g.: ${loggedUsername}`,
+        placeholder: `E.g.: ${loggedUsername || 'brunolemos'}`,
         ...textInputProps,
       })
     }
@@ -662,7 +662,7 @@ export const AddColumnDetailsModal = React.memo(
       textInputProps: Partial<ThemedTextInputProps> = {},
     ) {
       return renderGenericFormTextInput('user', required, {
-        placeholder: `E.g.: ${loggedUsername}`,
+        placeholder: `E.g.: ${loggedUsername || 'brunolemos'}`,
         ...textInputProps,
       })
     }
@@ -825,27 +825,27 @@ function getNewColumnAndSubscriptions(
       switch (subtype) {
         case 'REPO_NOTIFICATIONS':
         default: {
-          newSubscription = createSubscriptionObjectWithId<
-            NotificationColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
-              all: true,
-              participating: formValues.inbox === 'participating',
-              ...(!!(repoOwnerAndRepo.owner && repoOwnerAndRepo.repo) && {
-                owner: repoOwnerAndRepo.owner,
-                repo: repoOwnerAndRepo.repo,
-              }),
+          newSubscription = createSubscriptionObjectWithId<NotificationColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+                all: true,
+                participating: formValues.inbox === 'participating',
+                ...(!!(repoOwnerAndRepo.owner && repoOwnerAndRepo.repo) && {
+                  owner: repoOwnerAndRepo.owner,
+                  repo: repoOwnerAndRepo.repo,
+                }),
+              },
+              type,
+              subtype:
+                repoOwnerAndRepo.owner && repoOwnerAndRepo.repo
+                  ? 'REPO_NOTIFICATIONS'
+                  : undefined,
             },
-            type,
-            subtype:
-              repoOwnerAndRepo.owner && repoOwnerAndRepo.repo
-                ? 'REPO_NOTIFICATIONS'
-                : undefined,
-          })
+          )
           _newColumnFilters.notifications =
             _newColumnFilters.notifications || {}
-          _newColumnFilters.notifications!.participating =
+          _newColumnFilters.notifications.participating =
             newSubscription.params.participating
 
           break
@@ -865,44 +865,44 @@ function getNewColumnAndSubscriptions(
         case 'ISSUES':
         case 'PULLS':
         default: {
-          newSubscription = createSubscriptionObjectWithId<
-            IssueOrPullRequestColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
-              owners: {
-                ...(!!formValues.owner && {
-                  [formValues.owner]: {
-                    value: true,
-                    repos: {},
-                  },
-                }),
-
-                ...(!!repoOwnerAndRepo.owner &&
-                  !!repoOwnerAndRepo.repo && {
-                    [repoOwnerAndRepo.owner]: {
+          newSubscription = createSubscriptionObjectWithId<IssueOrPullRequestColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+                owners: {
+                  ...(!!formValues.owner && {
+                    [formValues.owner]: {
                       value: true,
-                      repos: {
-                        [repoOwnerAndRepo.repo]: true,
-                      },
+                      repos: {},
                     },
                   }),
-              },
-              involves: formValues.user
-                ? {
-                    [formValues.user]: true,
-                  }
-                : undefined,
-              subjectType:
-                subtype === 'ISSUES'
-                  ? 'Issue'
-                  : subtype === 'PULLS'
-                  ? 'PullRequest'
+
+                  ...(!!repoOwnerAndRepo.owner &&
+                    !!repoOwnerAndRepo.repo && {
+                      [repoOwnerAndRepo.owner]: {
+                        value: true,
+                        repos: {
+                          [repoOwnerAndRepo.repo]: true,
+                        },
+                      },
+                    }),
+                },
+                involves: formValues.user
+                  ? {
+                      [formValues.user]: true,
+                    }
                   : undefined,
+                subjectType:
+                  subtype === 'ISSUES'
+                    ? 'Issue'
+                    : subtype === 'PULLS'
+                    ? 'PullRequest'
+                    : undefined,
+              },
+              type,
+              subtype,
             },
-            type,
-            subtype,
-          })
+          )
 
           _newColumnFilters.involves = newSubscription.params.involves
           _newColumnFilters.subjectTypes = newSubscription.params.subjectType
@@ -936,32 +936,32 @@ function getNewColumnAndSubscriptions(
       switch (subtype) {
         case 'ORG_PUBLIC_EVENTS':
         case 'USER_ORG_EVENTS': {
-          newSubscription = createSubscriptionObjectWithId<
-            ActivityColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
-              org: formValues.org,
-              username: subtype === 'USER_ORG_EVENTS' ? loggedUsername : '',
+          newSubscription = createSubscriptionObjectWithId<ActivityColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+                org: formValues.org,
+                username: subtype === 'USER_ORG_EVENTS' ? loggedUsername : '',
+              },
+              type,
+              subtype,
             },
-            type,
-            subtype,
-          })
+          )
           filterBotsForksAndStarsOut()
 
           break
         }
 
         case 'PUBLIC_EVENTS': {
-          newSubscription = createSubscriptionObjectWithId<
-            ActivityColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
+          newSubscription = createSubscriptionObjectWithId<ActivityColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+              },
+              type,
+              subtype,
             },
-            type,
-            subtype,
-          })
+          )
           filterBotsForksAndStarsOut()
 
           break
@@ -971,17 +971,17 @@ function getNewColumnAndSubscriptions(
         case 'REPO_NETWORK_EVENTS': {
           if (!(repoOwnerAndRepo.owner && repoOwnerAndRepo.repo)) return null
 
-          newSubscription = createSubscriptionObjectWithId<
-            ActivityColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
-              owner: repoOwnerAndRepo.owner,
-              repo: repoOwnerAndRepo.repo,
+          newSubscription = createSubscriptionObjectWithId<ActivityColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+                owner: repoOwnerAndRepo.owner,
+                repo: repoOwnerAndRepo.repo,
+              },
+              type,
+              subtype,
             },
-            type,
-            subtype,
-          })
+          )
           filterBotsForksAndStarsOut()
 
           break
@@ -993,16 +993,16 @@ function getNewColumnAndSubscriptions(
         case 'USER_RECEIVED_PUBLIC_EVENTS': {
           if (!formValues.user) return null
 
-          newSubscription = createSubscriptionObjectWithId<
-            ActivityColumnSubscriptionCreation
-          >({
-            params: {
-              ...(defaultParams as any),
-              username: formValues.user,
+          newSubscription = createSubscriptionObjectWithId<ActivityColumnSubscriptionCreation>(
+            {
+              params: {
+                ...(defaultParams as any),
+                username: formValues.user,
+              },
+              type,
+              subtype,
             },
-            type,
-            subtype,
-          })
+          )
 
           if (subtype === 'USER_RECEIVED_EVENTS') {
             newColumnFilters.subjectTypes = newColumnFilters.subjectTypes || {

@@ -337,12 +337,8 @@ export type GenericColumnCreation<
 }
 
 export type ActivityColumnCreation = GenericColumnCreation<ActivityColumn>
-export type IssueOrPullRequestColumnCreation = GenericColumnCreation<
-  IssueOrPullRequestColumn
->
-export type NotificationColumnCreation = GenericColumnCreation<
-  NotificationColumn
->
+export type IssueOrPullRequestColumnCreation = GenericColumnCreation<IssueOrPullRequestColumn>
+export type NotificationColumnCreation = GenericColumnCreation<NotificationColumn>
 
 export type ColumnCreation =
   | ActivityColumnCreation
@@ -361,15 +357,9 @@ export type GenericColumnSubscriptionCreation<
   updatedAt?: string | undefined
 }
 
-export type ActivityColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
-  ActivityColumnSubscription
->
-export type IssueOrPullRequestColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
-  IssueOrPullRequestColumnSubscription
->
-export type NotificationColumnSubscriptionCreation = GenericColumnSubscriptionCreation<
-  NotificationColumnSubscription
->
+export type ActivityColumnSubscriptionCreation = GenericColumnSubscriptionCreation<ActivityColumnSubscription>
+export type IssueOrPullRequestColumnSubscriptionCreation = GenericColumnSubscriptionCreation<IssueOrPullRequestColumnSubscription>
+export type NotificationColumnSubscriptionCreation = GenericColumnSubscriptionCreation<NotificationColumnSubscription>
 
 export type ColumnSubscriptionCreation =
   | ActivityColumnSubscriptionCreation
@@ -393,7 +383,7 @@ export interface ColumnAndSubscriptions {
 }
 
 export interface ColumnsAndSubscriptions {
-  columns: Array<ColumnAndSubscriptions['column']>
+  columns: ColumnAndSubscriptions['column'][]
   subscriptions: ColumnAndSubscriptions['subscriptions']
   columnsUpdatedAt?: string
   subscriptionsUpdatedAt?: string
@@ -582,11 +572,11 @@ export interface Plan {
     round: 'up' | 'down'
   }
 
-  featureLabels: Array<{
+  featureLabels: {
     id: FeatureFlagId
     label: string
     available: boolean
-  }>
+  }[]
 
   featureFlags: {
     columnsLimit: number
@@ -597,7 +587,7 @@ export interface Plan {
   }
 }
 
-export interface UserPlan extends GraphQLUserPlan {}
+export type UserPlan = GraphQLUserPlan
 
 export interface ItemPushNotification<
   A extends { type: string; payload: any } = { type: string; payload: any }

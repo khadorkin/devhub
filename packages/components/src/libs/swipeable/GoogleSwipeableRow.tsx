@@ -20,8 +20,7 @@ export type GoogleSwipeableRowAction = BaseSwipeableRowAction & {
   icon: IconProp
 }
 
-export interface GoogleSwipeableRowProps
-  extends BaseSwipeableRowProps<GoogleSwipeableRowAction> {}
+export type GoogleSwipeableRowProps = BaseSwipeableRowProps<GoogleSwipeableRowAction>
 
 const AnimatedOcticons = Animated.createAnimatedComponent(Octicons)
 const AnimatedMaterialIcons = Animated.createAnimatedComponent(MaterialIcons)

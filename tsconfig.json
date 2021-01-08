@@ -1,23 +1,9 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "es5",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "esnext"
   },
-  "exclude": [
-    "node_modules"
-  ],
-  "include": [
-    "landing/next-env.d.ts"
-  ],
-  "references": [
-    {
-      "path": "packages/core"
-    }
-  ]
+  "exclude": ["node_modules"],
+  "include": ["@types", "landing", "packages"]
 }

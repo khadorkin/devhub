@@ -56,8 +56,8 @@ export function DialogProvider(props: DialogProviderProps) {
 
   const value = useMemo<DialogProviderState>(
     () => ({
-      show: (...params) => dialogRef.current!.show(params),
-      hide: () => dialogRef.current!.hide(),
+      show: (...params) => dialogRef.current?.show(params),
+      hide: () => dialogRef.current?.hide(),
     }),
     [],
   )
@@ -71,7 +71,6 @@ export function DialogProvider(props: DialogProviderProps) {
 }
 
 export const DialogConsumer = DialogContext.Consumer
-;(DialogConsumer as any).displayName = 'DialogConsumer'
 
 export function useDialog() {
   return useContext(DialogContext)
@@ -191,6 +190,9 @@ const DialogView = React.memo(
                 options && options.cancelable === false
                   ? undefined
                   : () => {
+                      buttons
+                        ?.find((button) => button?.style === 'cancel')
+                        ?.onPress?.('')
                       hide()
                     }
               }
@@ -340,7 +342,10 @@ const DialogView = React.memo(
                             >
                               <Button
                                 autoFocus={
-                                  buttonType === 'primary' && !disabled
+                                  Platform.OS === 'web' &&
+                                  !(renderInput && options) &&
+                                  buttonType === 'primary' &&
+                                  !disabled
                                 }
                                 disabled={disabled}
                                 onPress={() => {

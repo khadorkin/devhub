@@ -15,13 +15,11 @@ export function findNode(ref: any) {
   try {
     let node = ref && (ref.current || ref)
 
-    if (node && (node as any).getNode && (node as any).getNode())
-      node = (node as any).getNode()
+    if (node && node.getNode && node.getNode()) node = node.getNode()
 
-    if (node && (node as any)._touchableNode)
-      node = (node as any)._touchableNode
+    if (node && node._touchableNode) node = node._touchableNode
 
-    if (node && (node as any)._node) node = (node as any)._node
+    if (node && node._node) node = node._node
 
     if (node && Platform.OS === 'web') node = findDOMNode(node)
 
@@ -32,17 +30,22 @@ export function findNode(ref: any) {
   }
 }
 
-export function tryFocus(ref: any) {
-  const node = findNode(ref)
+export function tryFocus(ref: any): boolean | null {
+  try {
+    const node = findNode(ref)
 
-  if (node && node.focus) {
-    if (!(node.tabIndex >= 0)) node.tabIndex = -1
+    if (node?.focus) {
+      if (!(node.tabIndex >= 0)) node.tabIndex = -1
 
-    node.focus({ preventScroll: true })
-    return node
+      node.focus({ preventScroll: true })
+      return true
+    }
+  } catch (error) {
+    console.error(error)
+    return false
   }
 
-  return false
+  return null
 }
 
 export function getGitHubAppInstallUri(
@@ -84,13 +87,13 @@ export async function openAppStore({
       let storeUrl = `market://details?id=${constants.GOOGLEPLAY_ID}`
 
       if (Platform.OS === 'android' && (await Linking.canOpenURL(storeUrl))) {
-        if (__DEV__) console.log(`Requested to open Play Store: ${storeUrl}`) // tslint:disable-line no-console
+        if (__DEV__) console.log(`Requested to open Play Store: ${storeUrl}`) // eslint-disable-line no-console
         await Linking.openURL(storeUrl)
         return true
       }
 
       storeUrl = `https://play.google.com/store/apps/details?id=${constants.GOOGLEPLAY_ID}`
-      if (__DEV__) console.log(`Requested to open Play Store: ${storeUrl}`) // tslint:disable-line no-console
+      if (__DEV__) console.log(`Requested to open Play Store: ${storeUrl}`) // eslint-disable-line no-console
       await Browser.openURL(storeUrl)
       return true
     }
@@ -99,7 +102,7 @@ export async function openAppStore({
       let storeUrl = `itms-apps://itunes.apple.com/app/id${constants.APPSTORE_ID}`
 
       if (Platform.OS === 'ios' && (await Linking.canOpenURL(storeUrl))) {
-        if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // tslint:disable-line no-console
+        if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // eslint-disable-line no-console
         await Linking.openURL(storeUrl)
         return true
       }
@@ -107,14 +110,14 @@ export async function openAppStore({
       storeUrl = showReviewModal
         ? `https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewContentsUserReviews?id=${constants.APPSTORE_ID}&pageNumber=0&sortOrdering=2&mt=8`
         : `https://itunes.apple.com/WebObjects/MZStore.woa/wa/viewSoftware?id=${constants.APPSTORE_ID}&pageNumber=0&sortOrdering=2&mt=8`
-      if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // tslint:disable-line no-console
+      if (__DEV__) console.log(`Requested to open App Store: ${storeUrl}`) // eslint-disable-line no-console
       await Browser.openURL(storeUrl)
       return true
     }
 
     throw new Error(`Invalid platform: ${Platform.realOS}`)
   } catch (error) {
-    if (__DEV__) console.error(`Failed to open App Store: ${error}`) // tslint:disable-line no-console
+    if (__DEV__) console.error(`Failed to open App Store: ${error}`) // eslint-disable-line no-console
     return false
   }
 }

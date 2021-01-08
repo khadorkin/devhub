@@ -80,7 +80,7 @@ export function getOpenAtLoginMenuItem() {
 }
 
 export function getUpdaterMenuItem() {
-  let enabled: boolean = !__DEV__
+  let enabled = !__DEV__
   let label: string
 
   const updateInfo = updater.getUpdateInfo()
@@ -157,7 +157,7 @@ export function getUpdaterMenuItem() {
 }
 
 export function getDeveloperMenuItems() {
-  const menuItems: Array<MenuItemConstructorOptions | undefined> = [
+  const menuItems: (MenuItemConstructorOptions | undefined)[] = [
     {
       label: 'Toggle Developer Tools',
       accelerator: __DEV__
@@ -190,12 +190,6 @@ export function getRestartMenuItem() {
 
 export function getModeMenuItems() {
   const _mainWindow = window.getMainWindow()
-  const _tray = tray.getTray()
-  if (
-    !(_tray && _tray.getBounds().width && _tray.getBounds().height) &&
-    !config.store.get('isMenuBarMode')
-  )
-    return []
 
   const isCurrentWindow =
     _mainWindow && _mainWindow.isVisible() && !_mainWindow.isMinimized()
@@ -264,7 +258,7 @@ export function getMainMenuItems() {
     _mainWindow && _mainWindow.isVisible() && !_mainWindow.isMinimized()
   const enabled = isCurrentWindow || !!config.store.get('isMenuBarMode')
 
-  const menuItems: Array<MenuItemConstructorOptions | undefined> = [
+  const menuItems: (MenuItemConstructorOptions | undefined)[] = [
     ...(process.platform === 'darwin'
       ? ([
           {
@@ -467,7 +461,7 @@ export function getTrayMenuItems() {
       visible: !config.store.get('isMenuBarMode'),
     },
     ...getWindowMenuItems().filter(
-      item => item.label !== 'Close' && item.visible !== false,
+      (item) => item.label !== 'Close' && item.visible !== false,
     ),
     {
       type: 'separator',

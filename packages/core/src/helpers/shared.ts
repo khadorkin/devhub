@@ -39,6 +39,10 @@ export function capitalize(str: string) {
   return str.toLowerCase().replace(/^.| ./g, _.toUpper)
 }
 
+export function capitalizeFirstLetter(str: string) {
+  return `${str.charAt(0).toUpperCase()}${str.slice(1)}`
+}
+
 export function memoizeMultipleArgs<FN extends (...args: any[]) => any>(
   fn: FN,
 ): FN {
@@ -47,7 +51,7 @@ export function memoizeMultipleArgs<FN extends (...args: any[]) => any>(
 
 export function guid() {
   const str4 = () =>
-    (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1) // tslint:disable-line
+    (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1) // eslint-disable-line
   return `${
     str4() + str4()
   }-${str4()}-${str4()}-${str4()}-${str4()}${str4()}${str4()}`
@@ -170,7 +174,7 @@ export function randomBetween(minNumber: number, maxNumber: number) {
   return Math.floor(Math.random() * maxNumber) + minNumber
 }
 
-export function trimNewLinesAndSpaces(text?: string, maxLength: number = 120) {
+export function trimNewLinesAndSpaces(text?: string, maxLength = 120) {
   if (!text || typeof text !== 'string') return ''
 
   let newText = text.replace(/\s+/g, ' ').trim()
@@ -558,7 +562,7 @@ export function getSearchQueryFromFilter(
 }
 
 export function getQueryStringFromQueryTerms(
-  queryTerms: Array<[string, boolean] | [string, string, boolean]>,
+  queryTerms: ([string, boolean] | [string, string, boolean])[],
 ) {
   let query = ''
   queryTerms.forEach((queryTerm) => {
@@ -578,10 +582,10 @@ export function getQueryStringFromQueryTerms(
 
 export function getSearchQueryTerms(
   query: string | undefined,
-): Array<[string, boolean] | [string, string, boolean]> {
+): ([string, boolean] | [string, string, boolean])[] {
   if (!(query && typeof query === 'string')) return []
 
-  const result: Array<[string, boolean] | [string, string, boolean]> = []
+  const result: ([string, boolean] | [string, string, boolean])[] = []
 
   const q = query.trim()
 
@@ -846,9 +850,7 @@ export function getFilterFromSearchQuery(
       case 'action': {
         if (type !== 'activity') return
 
-        const action = `${value || ''}`.toLowerCase().trim() as
-          | GitHubEventAction
-          | string
+        const action = `${value || ''}`.toLowerCase().trim()
 
         activityFilters.activity = activityFilters.activity || {}
         activityFilters.activity.actions =
@@ -864,9 +866,7 @@ export function getFilterFromSearchQuery(
       }
 
       case 'state': {
-        const state = `${value || ''}`.toLowerCase().trim() as
-          | GitHubStateType
-          | string
+        const state = `${value || ''}`.toLowerCase().trim()
 
         filters.state = filters.state || {}
 
@@ -879,9 +879,7 @@ export function getFilterFromSearchQuery(
       }
 
       case 'type': {
-        const subjectType = `${value || ''}`.toLowerCase().trim() as
-          | GitHubItemSubjectType
-          | string
+        const subjectType = `${value || ''}`.toLowerCase().trim()
 
         filters.subjectTypes = filters.subjectTypes || {}
         const subjectTypesFilter = filters.subjectTypes as Record<
@@ -900,9 +898,7 @@ export function getFilterFromSearchQuery(
       case 'reason': {
         if (type !== 'notifications') return
 
-        let reason = `${value || ''}`.toLowerCase().trim() as
-          | EnhancedGitHubNotification['reason']
-          | string
+        let reason = `${value || ''}`.toLowerCase().trim()
         if (reason === 'watching') reason = 'subscribed'
 
         notificationsFilters.notifications =
@@ -973,7 +969,7 @@ export function getValuesFromQueryKeysFilter(
         queryKeys.includes(queryTerm[0] as any),
     ),
     ['0', '2'],
-  ) as any) as Array<[string, string, boolean]>
+  ) as any) as [string, string, boolean][]
   const usedQueryKeys = _.uniq(
     filteredQueryTerms.map((queryTerm) => queryTerm[0]),
   )
@@ -1072,36 +1068,32 @@ export function getUsernamesFromFilter(
 export function getItemsFromSubscriptions(
   subscriptions: ColumnSubscription[],
   getItemByNodeIdOrId: (nodeIdOrId: string) => EnhancedItem | undefined,
+  savedIdsToInclude: string[],
 ): EnhancedItem[] {
   const itemNodeIdOrIds: string[] = []
   const result: EnhancedItem[] = []
 
-  if (!(subscriptions && subscriptions.length)) return result
+  if (!subscriptions?.length) return result
+
+  function processId(id: string) {
+    const idStr = `${id || ''}`
+    if (!idStr) return
+
+    if (itemNodeIdOrIds.includes(idStr)) return
+
+    const item = getItemByNodeIdOrId(idStr)
+    if (!item) return
+
+    itemNodeIdOrIds.push(idStr)
+    result.push(item)
+  }
 
   subscriptions.forEach((subscription) => {
-    if (
-      !(
-        subscription &&
-        subscription.data &&
-        subscription.data.itemNodeIdOrIds &&
-        subscription.data.itemNodeIdOrIds.length
-      )
-    )
-      return
-
-    subscription.data.itemNodeIdOrIds.forEach((_id) => {
-      const id = `${_id || ''}`
-      if (!id) return
-
-      if (itemNodeIdOrIds.includes(id)) return
-
-      const item = getItemByNodeIdOrId(id)
-      if (!item) return
-
-      itemNodeIdOrIds.push(id)
-      result.push(item)
-    })
+    if (!subscription?.data?.itemNodeIdOrIds?.length) return
+    subscription.data.itemNodeIdOrIds.forEach(processId)
   })
+
+  savedIdsToInclude?.forEach(processId)
 
   if (!result.length) return result
 

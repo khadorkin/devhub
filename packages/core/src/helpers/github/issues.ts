@@ -342,7 +342,7 @@ export async function getIssueOrPullRequestsEnhancementMap(
 }
 
 export function enhanceIssueOrPullRequests(
-  items: Array<GitHubIssueOrPullRequest | EnhancedGitHubIssueOrPullRequest>,
+  items: (GitHubIssueOrPullRequest | EnhancedGitHubIssueOrPullRequest)[],
   enhancementMap: Record<string, IssueOrPullRequestPayloadEnhancement>,
   currentEnhancedIssueOrPullRequests: EnhancedGitHubIssueOrPullRequest[] = [],
 ) {
@@ -378,7 +378,7 @@ export function sortIssuesOrPullRequests(
 
 export function getGitHubIssueSearchQuery(
   params: IssueOrPullRequestColumnSubscription['params'],
-  includeDefaultSorting: boolean = true,
+  includeDefaultSorting = true,
 ) {
   const queries: string[] = []
 

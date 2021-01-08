@@ -40,7 +40,7 @@ export function ThemeProvider(props: ThemeProviderProps) {
     () => ({
       theme,
       toggleTheme: () => {
-        setTheme(t => (t.isDark ? defaultLightTheme : defaultDarkTheme))
+        setTheme((t) => (t.isDark ? defaultLightTheme : defaultDarkTheme))
       },
     }),
     [theme.id],
@@ -54,7 +54,6 @@ export function ThemeProvider(props: ThemeProviderProps) {
 }
 
 export const ThemeConsumer = ThemeContext.Consumer
-;(ThemeConsumer as any).displayName = 'ThemeConsumer'
 
 export function useTheme() {
   return useContext(ThemeContext)

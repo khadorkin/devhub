@@ -64,8 +64,8 @@ export default function DownloadPage(_props: DownloadPageProps) {
   const category = _category || system.category || 'web'
   const { os } = system
 
-  const version = '0.101.0'
-  const releaseDate = '2020-06-01'
+  const version = '0.102.0'
+  const releaseDate = '2020-12-08'
 
   return (
     <LandingLayout>
@@ -86,9 +86,9 @@ export default function DownloadPage(_props: DownloadPageProps) {
               <>
                 DevHub for{' '}
                 <Select<PlatformCategory>
-                  onChange={option => setCategory(option)}
+                  onChange={(option) => setCategory(option)}
                 >
-                  {categories.map(c => (
+                  {categories.map((c) => (
                     <Select.Option
                       key={`download-category-${c}`}
                       id={c}

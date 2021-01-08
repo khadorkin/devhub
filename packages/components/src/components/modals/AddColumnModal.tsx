@@ -6,7 +6,7 @@ import {
 import { rgba } from 'polished'
 import React, { useCallback, useLayoutEffect, useRef } from 'react'
 import { View } from 'react-native'
-import { useSpring } from 'react-spring/native'
+import { useSpring } from '@react-spring/native'
 
 import { useHover } from '../../hooks/use-hover'
 import { useReduxAction } from '../../hooks/use-redux-action'
@@ -146,12 +146,23 @@ const columnTypes: {
       {
         payload: {
           icon: { family: 'octicon', name: 'organization' },
-          title: 'Organization activity',
+          title: 'Organization activity (public)',
           subscription: {
             type: 'activity',
             subtype: 'ORG_PUBLIC_EVENTS',
           },
           isPrivateSupported: false,
+        },
+      },
+      {
+        payload: {
+          icon: { family: 'octicon', name: 'organization' },
+          title: 'Organization dashboard (private)',
+          subscription: {
+            type: 'activity',
+            subtype: 'USER_ORG_EVENTS',
+          },
+          isPrivateSupported: true,
         },
       },
     ],
@@ -227,7 +238,12 @@ function AddColumnModalItem({
           ? () =>
               pushModal({
                 name: 'ADD_COLUMN_DETAILS',
-                params: payload,
+                params: {
+                  ...payload,
+                  title: payload.title
+                    ?.replace(' (private)', '')
+                    .replace(' (public)', ''),
+                },
               })
           : undefined
       }
@@ -292,16 +308,11 @@ export function AddColumnModal(props: AddColumnModalProps) {
                   analyticsLabel={`add-column-${group.title}-soon`}
                   href={group.soonLink}
                 >
-                  <H2
-                    muted
-                    withMargin={false}
-                    children={
-                      group.soonLink && group.soonLink.includes('beta')
-                        ? ' (beta)'
-                        : ' (soon)'
-                    }
-                    style={sharedStyles.flex}
-                  />
+                  <H2 muted withMargin={false} style={sharedStyles.flex}>
+                    {group.soonLink && group.soonLink.includes('beta')
+                      ? ' (beta)'
+                      : ' (soon)'}
+                  </H2>
                 </Link>
               )}
             </SubHeader>

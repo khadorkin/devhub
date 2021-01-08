@@ -73,13 +73,16 @@ function* init() {
         'LOGOUT',
         'REFRESH_INSTALLATIONS_SUCCESS',
         'REPLACE_COLUMNS_AND_SUBSCRIPTIONS',
+        'REPLACE_PERSONAL_TOKEN_DETAILS',
       ]),
     })
 
     const forceFetchAll = !!(
       (_isFirstTime &&
         initialAction.type === 'REFRESH_INSTALLATIONS_SUCCESS') ||
-      (action && action.type === 'REFRESH_INSTALLATIONS_SUCCESS')
+      action?.type === 'LOGIN_SUCCESS' ||
+      action?.type === 'REFRESH_INSTALLATIONS_SUCCESS' ||
+      action?.type === 'REPLACE_PERSONAL_TOKEN_DETAILS'
     )
 
     const isFirstTime = _isFirstTime
@@ -113,11 +116,6 @@ function* init() {
       .filter(
         (s) =>
           s &&
-          !(
-            (s.data.loadState === 'loading' ||
-              s.data.loadState === 'loading_first') &&
-            !minimumRefetchTimeHasPassed(s, 1 * 60 * 1000)
-          ) &&
           (forceFetchAll ||
             minimumRefetchTimeHasPassed(
               s,
@@ -150,7 +148,7 @@ function* init() {
           (!timeDiff || timeDiff < fiveMinutes)
         ) {
           if (__DEV__) {
-            // tslint:disable-next-line no-console
+            // eslint-disable-next-line no-console
             console.debug(
               'Ignoring subscription re-fetch due to recent fetch error.',
               subscription.id,
@@ -328,7 +326,7 @@ function* onFetchRequest(
 
   const owner = getSubscriptionOwnerOrOrg(subscription)
 
-  const privateToken = selectors.getPrivateTokenByOwnerSelector(state, owner)
+  const privateTokenDetails = selectors.githubPrivateTokenDetailsSelector(state)
   const installationToken = selectors.installationTokenByOwnerSelector(
     state,
     owner,
@@ -337,13 +335,11 @@ function* onFetchRequest(
   const githubAppTokenDetails = selectors.githubAppTokenDetailsSelector(state)
   const loggedUsername = selectors.currentGitHubUsernameSelector(state)!
 
-  const githubToken =
-    (subscription &&
-      (subscription.type === 'activity' ||
-        subscription.type === 'issue_or_pr') &&
-      privateToken) ||
+  const githubToken: string =
+    privateTokenDetails?.token ||
     githubOAuthOrPersonalToken ||
-    (githubAppTokenDetails && githubAppTokenDetails.token)
+    (subscription?.type === 'issue_or_pr' && githubAppTokenDetails?.token) ||
+    ''
 
   const appTokenType: GitHubAppTokenType =
     (githubToken === installationToken && 'app-installation') ||

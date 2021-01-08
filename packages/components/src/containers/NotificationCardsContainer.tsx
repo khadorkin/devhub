@@ -2,7 +2,6 @@ import {
   EnhancedGitHubNotification,
   getDefaultPaginationPerPage,
   getOlderOrNewerItemDate,
-  NotificationColumnSubscription,
 } from '@devhub/core'
 import React, { useCallback } from 'react'
 import { useDispatch } from 'react-redux'
@@ -42,8 +41,12 @@ export const NotificationCardsContainer = React.memo(
     const dispatch = useDispatch()
 
     const appToken = useReduxState(selectors.appTokenSelector)
-    const githubToken = useReduxState(selectors.githubTokenSelector)
-    const githubOAuthScope = useReduxState(selectors.githubOAuthScopeSelector)
+    const githubTokenDetails = useReduxState(
+      selectors.githubTokenDetailsSelector,
+    )
+
+    const githubToken = githubTokenDetails?.token
+    const githubScope = githubTokenDetails?.scope
 
     // TODO: Support multiple subscriptions per column.
     const mainSubscription = useReduxState(
@@ -52,13 +55,17 @@ export const NotificationCardsContainer = React.memo(
           selectors.createColumnSubscriptionSelector()(state, columnId),
         [columnId],
       ),
-    ) as NotificationColumnSubscription | undefined
+    )
 
     const data = mainSubscription && mainSubscription.data
 
-    const { allItems, filteredItemsIds, getItemByNodeIdOrId } = useColumnData<
-      EnhancedGitHubNotification
-    >(columnId, { mergeSimilar: false })
+    const {
+      allItems,
+      filteredItemsIds,
+      getItemByNodeIdOrId,
+    } = useColumnData<EnhancedGitHubNotification>(columnId, {
+      mergeSimilar: false,
+    })
 
     const clearedAt = column && column.filters && column.filters.clearedAt
     const olderDate = getOlderOrNewerItemDate(
@@ -108,8 +115,8 @@ export const NotificationCardsContainer = React.memo(
       !(
         appToken &&
         githubToken &&
-        githubOAuthScope &&
-        githubOAuthScope.includes('notifications')
+        githubScope &&
+        githubScope.includes('notifications')
       )
     ) {
       return <NoTokenView githubAppType="oauth" />

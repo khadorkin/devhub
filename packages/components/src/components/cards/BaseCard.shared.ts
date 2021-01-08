@@ -421,20 +421,22 @@ function _getCardPropsForItem(
                   event.type === 'WatchEvent' && actorAvatar.linkURL
                     ? repoIsKnown
                       ? actorAvatar.linkURL
-                      : `${actorAvatar.linkURL}?tab=stars&q=${repoFullName}`
+                      : `${actorAvatar.linkURL}?tab=stars&q=${
+                          repoFullName || ''
+                        }`
                     : forkURL || repoURL,
                 nodeIdOrId: getItemNodeIdOrId(item)!,
                 showPrivateLock: isPrivate,
                 subitems: undefined,
                 subtitle: undefined,
                 text: {
-                  text: actionText!,
+                  text: actionText,
                   repo: repoIsKnown
                     ? undefined
                     : {
                         owner: repoOwnerName!,
                         name: repoName!,
-                        url: repoURL!,
+                        url: repoURL,
                       },
                 },
                 title: actorUsername,
@@ -458,7 +460,7 @@ function _getCardPropsForItem(
                   repo: {
                     owner: repoOwnerName!,
                     name: repoName!,
-                    url: repoURL!,
+                    url: repoURL,
                   },
                 },
                 title: repoName!,
@@ -507,7 +509,7 @@ function _getCardPropsForItem(
                   repoIsKnown,
                   issueOrPullRequestNumber: issueOrPullRequest.number,
                 })!,
-                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL! },
+                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL },
               },
               title: issueOrPullRequest.title,
               type,
@@ -567,7 +569,7 @@ function _getCardPropsForItem(
                     repo: {
                       owner: repoOwnerName!,
                       name: repoName!,
-                      url: repoURL!,
+                      url: repoURL,
                     },
                   },
               title: trimNewLinesAndSpaces(commit.message, 120),
@@ -703,7 +705,7 @@ function _getCardPropsForItem(
                   repoFullName,
                   repoIsKnown,
                 })!,
-                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL! },
+                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL },
               },
               title: pages[0].title || pages[0].page_name,
               type,
@@ -751,7 +753,7 @@ function _getCardPropsForItem(
                   repoFullName,
                   repoIsKnown,
                 })!,
-                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL! },
+                repo: { owner: repoOwnerName!, name: repoName!, url: repoURL },
               },
               title: release.name || release.tag_name,
               type,
@@ -783,7 +785,9 @@ function _getCardPropsForItem(
               ((subjectType === 'Repository' ||
                 subjectType === 'RepositoryVulnerabilityAlert') &&
                 repoURL) ||
-              (subjectType === 'User' && users[0] && users[0].html_url) ||
+              (subjectType === 'User' && event.type === 'MemberEvent'
+                ? repoURL
+                : users?.[0]?.html_url) ||
               (branchOrTagName &&
                 ((isTagMainEvent &&
                   `${repoURL}/releases/tag/${branchOrTagName}`) ||
@@ -801,11 +805,13 @@ function _getCardPropsForItem(
                     ? branchOrTagName
                     : undefined,
                 issueOrPullRequestNumber: undefined,
-                ownerIsKnown: false,
+                ownerIsKnown:
+                  isBranchMainEvent || isTagMainEvent ? ownerIsKnown : false,
                 repoFullName: repoOwnerName,
-                repoIsKnown: false,
+                repoIsKnown:
+                  isBranchMainEvent || isTagMainEvent ? ownerIsKnown : false,
               })!,
-              repo: { owner: repoOwnerName!, name: repoName!, url: repoURL! },
+              repo: { owner: repoOwnerName!, name: repoName!, url: repoURL },
             },
             title: repoName!,
             type,
@@ -1025,7 +1031,9 @@ function _getCardPropsForItem(
         title: trimNewLinesAndSpaces(subject.title, 120),
         type,
         githubApp:
-          isPrivate && !notification.enhanced
+          constants.ENABLE_GITHUB_APP_SUPPORT &&
+          isPrivate &&
+          !notification.enhanced
             ? {
                 ownerId: repo.owner && repo.owner.id,
                 repoId: repo.id,
@@ -1254,10 +1262,9 @@ export function getCardSizeForItem(
   return getCardSizeForProps(getCardPropsForItem(...args))
 }
 
-export interface CardPushNotification
-  extends ItemPushNotification<
-    ExtractActionFromActionCreator<typeof actions.openItem>
-  > {}
+export type CardPushNotification = ItemPushNotification<
+  ExtractActionFromActionCreator<typeof actions.openItem>
+>
 export function getCardPushNotificationItem(
   column: Pick<Column, 'type' | 'id'>,
   item: EnhancedItem,
@@ -1428,7 +1435,9 @@ export function getCardPushNotificationItem(
             issueOrPullRequestNumber: issueOrPullRequest.number,
           })!,
           getIssueOrPullRequestState(issueOrPullRequest)
-            ? `Status: ${getIssueOrPullRequestState(issueOrPullRequest)} ${
+            ? `Status: ${
+                getIssueOrPullRequestState(issueOrPullRequest) || 'unknown'
+              } ${
                 isPullRequest(issueOrPullRequest)
                   ? isDraft(issueOrPullRequest as GitHubPullRequest)
                     ? 'draft pull request'
@@ -1479,7 +1488,9 @@ export function getCardPushNotificationItem(
               80,
             )) ||
           (issueOrPullRequest && getIssueOrPullRequestState(issueOrPullRequest)
-            ? `Status: ${getIssueOrPullRequestState(issueOrPullRequest)} ${
+            ? `Status: ${
+                getIssueOrPullRequestState(issueOrPullRequest) || 'unknown'
+              } ${
                 isPullRequest(issueOrPullRequest)
                   ? isDraft(issueOrPullRequest as GitHubPullRequest)
                     ? 'draft pull request'

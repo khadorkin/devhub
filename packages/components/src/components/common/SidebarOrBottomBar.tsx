@@ -156,9 +156,7 @@ export const SidebarOrBottomBar = React.memo(
     >(new Map())
     const overlayThemeColorsRef = useRef<{
       topOrLeft: FlatListWithOverlayProps<string>['topOrLeftOverlayThemeColor']
-      bottomOrRight: FlatListWithOverlayProps<
-        string
-      >['bottomOrRightOverlayThemeColor']
+      bottomOrRight: FlatListWithOverlayProps<string>['bottomOrRightOverlayThemeColor']
     }>({
       topOrLeft: getColumnHeaderThemeColors().normal,
       bottomOrRight: getColumnHeaderThemeColors().normal,
@@ -166,7 +164,7 @@ export const SidebarOrBottomBar = React.memo(
 
     const { sizename } = useAppLayout()
     const safeAreaInsets = useSafeArea()
-    const { freePlan } = usePlans()
+    const { freePlan, paidPlans } = usePlans()
 
     const dispatch = useDispatch()
     const bannerMessage = useReduxState(selectors.bannerMessageSelector)
@@ -349,7 +347,9 @@ export const SidebarOrBottomBar = React.memo(
           }
           showUnreadIndicator={
             !!(
-              (isPlanExpired && !(freePlan && !freePlan.trialPeriodDays)) ||
+              (isPlanExpired &&
+                !(freePlan && !freePlan.trialPeriodDays) &&
+                paidPlans.length) ||
               (userPlan &&
                 userPlan.status === 'active' &&
                 userPlan.cancelAtPeriodEnd &&
@@ -358,7 +358,9 @@ export const SidebarOrBottomBar = React.memo(
             )
           }
           unreadIndicatorColor={
-            (isPlanExpired && !(freePlan && !freePlan.trialPeriodDays)) ||
+            (isPlanExpired &&
+              !(freePlan && !freePlan.trialPeriodDays) &&
+              paidPlans.length) ||
             (userPlan &&
               userPlan.status === 'active' &&
               userPlan.cancelAtPeriodEnd &&
@@ -853,10 +855,11 @@ export const SidebarOrBottomBarItem = React.memo(
                   ? getColumnHeaderThemeColors().selected
                   : getColumnHeaderThemeColors().normal
               }
-              children={c}
               onPress={onPress}
               style={styles.itemContainer}
-            />
+            >
+              {c}
+            </ThemedTouchableOpacity>
           ) : (
             <ThemedView
               key={`sidebar-or-bottom-bar-item-${columnId}-inner`}
@@ -865,9 +868,10 @@ export const SidebarOrBottomBarItem = React.memo(
                   ? getColumnHeaderThemeColors().selected
                   : getColumnHeaderThemeColors().normal
               }
-              children={c}
               style={styles.itemContainer}
-            />
+            >
+              {c}
+            </ThemedView>
           )
         }
       >

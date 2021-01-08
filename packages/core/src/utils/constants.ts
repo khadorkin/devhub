@@ -1,6 +1,6 @@
 import { ThemeName, ThemePair } from '../types'
 
-const pkg = require('../../package.json') // tslint:disable-line
+const pkg = require('../../package.json') // eslint-disable-line
 
 export const APP_VERSION = `${pkg.version || ''}`.replace(/\-\d+$/g, '')
 
@@ -21,22 +21,29 @@ export const MAX_COLUMN_WIDTH = 340
 export const DISABLE_ANIMATIONS = false
 export const DISABLE_SWIPEABLE_CARDS = false
 
-export const DEFAULT_DARK_THEME: ThemeName = 'dark-blue'
-export const DEFAULT_LIGHT_THEME: ThemeName = 'light-blue'
+export const DEFAULT_DARK_THEME: ThemeName = 'dark-gray'
+export const DEFAULT_LIGHT_THEME: ThemeName = 'light-white'
 export const DEFAULT_THEME_PAIR: ThemePair = {
   id: 'auto',
   color: '',
 }
 
 export const DEFAULT_GITHUB_OAUTH_SCOPES = ['notifications', 'user:email']
-export const FULL_ACCESS_GITHUB_OAUTH_SCOPES = [
-  ...DEFAULT_GITHUB_OAUTH_SCOPES,
+export const FULL_ACCESS_GITHUB_OAUTH_SCOPES = DEFAULT_GITHUB_OAUTH_SCOPES.includes(
   'repo',
-]
-export const GITHUB_APP_HAS_CODE_ACCESS: boolean = true
+)
+  ? DEFAULT_GITHUB_OAUTH_SCOPES
+  : [...DEFAULT_GITHUB_OAUTH_SCOPES, 'repo']
 
-export const SHOW_GITHUB_FULL_ACCESS_LOGIN_BUTTON: boolean = false
-export const SHOW_GITHUB_PERSONAL_TOKEN_LOGIN_BUTTON: boolean = true
+// unfortunately github permissions are still not granular enough.
+// code permission is required to support some events, e.g. commits
+export const GITHUB_APP_HAS_CODE_ACCESS = true
+
+export const ENABLE_GITHUB_OAUTH_SUPPORT = true
+export const ENABLE_GITHUB_APP_SUPPORT = true
+export const ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT = true
+
+export const LOCAL_ONLY_PERSONAL_ACCESS_TOKEN = true
 
 export const APPSTORE_ID = '1191864199'
 export const GOOGLEPLAY_ID = 'com.devhubapp'

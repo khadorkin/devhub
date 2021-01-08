@@ -14,6 +14,8 @@ import { clearOAuthQueryParams } from '../../utils/helpers/auth'
 import { GitHubEmoji } from '../../utils/helpers/github/emojis'
 import { Button } from '../common/Button'
 import { GenericMessageWithButtonView } from './GenericMessageWithButtonView'
+import { QuickFeedbackRow } from '../common/QuickFeedbackRow'
+import { contentPadding } from '../../styles/variables'
 
 export interface NoTokenViewProps {
   emoji?: GitHubEmoji | null
@@ -69,18 +71,25 @@ export const NoTokenView = React.memo((props: NoTokenViewProps) => {
   return (
     <View style={sharedStyles.flex}>
       <View
-        style={[sharedStyles.flex, sharedStyles.center, sharedStyles.padding]}
+        style={[
+          sharedStyles.flex,
+          sharedStyles.center,
+          sharedStyles.padding,
+          { paddingBottom: contentPadding / 2 },
+        ]}
       >
         <GenericMessageWithButtonView
           buttonView={
             <Button
               analyticsLabel={`relogin_with_github_${githubAppType}`}
-              children="Login with GitHub"
               loading={isLoggingIn || isExecutingOAuth}
               onPress={() => startOAuth()}
-            />
+            >
+              Login with GitHub
+            </Button>
           }
           emoji={emoji}
+          footer={<QuickFeedbackRow />}
           subtitle={subtitle}
           title={title}
         />

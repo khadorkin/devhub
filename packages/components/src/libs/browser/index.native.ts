@@ -21,7 +21,7 @@ export const Browser: BrowserCrossPlatform = {
       return emitter.addListener(e, handler)
     }
 
-    console.debug('[BROWSER] Unknown addListener event', e) // tslint:disable-line no-console
+    console.debug('[BROWSER] Unknown addListener event', e) // eslint-disable-line no-console
     return null
   },
   dismiss: InAppBrowserReborn.close,
@@ -37,7 +37,6 @@ export const Browser: BrowserCrossPlatform = {
         preferredControlTintColor: foregroundColor,
         secondaryToolbarColor: foregroundColor,
         toolbarColor: backgroundColor,
-        waitForRedirectDelay: 500,
         ...(options && options.native),
       })
 
@@ -54,7 +53,7 @@ export const Browser: BrowserCrossPlatform = {
     }
   },
   openURLOnNewTab: (...args) => {
-    Browser.openURL(...args)
+    void Browser.openURL(...args)
   },
   setBackgroundColor: (color) => {
     backgroundColor = color

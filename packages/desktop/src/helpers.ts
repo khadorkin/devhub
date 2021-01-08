@@ -48,7 +48,9 @@ export function showWindow(win: BrowserWindow) {
   win.show()
 }
 
-export function getCenterPosition(obj: BrowserWindow | Tray) {
+export function getCenterPosition(
+  obj: Pick<BrowserWindow | Tray, 'getBounds'>,
+) {
   const bounds = obj.getBounds()
 
   const x = Math.round(bounds.x + bounds.width / 2)
@@ -68,7 +70,7 @@ export async function imageURLToNativeImage(imageURL: string | undefined) {
   } catch (error) {
     console.error(error)
     if (__DEV__ && getMainWindow()) {
-      dialog.showMessageBox(getMainWindow()!, { message: `${error}` })
+      void dialog.showMessageBox(getMainWindow()!, { message: `${error}` })
     }
   }
 }

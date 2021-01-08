@@ -1,5 +1,6 @@
 import {
-  ActivityColumnSubscription,
+  capitalizeFirstLetter,
+  constants,
   EnhancedGitHubEvent,
   getDefaultPaginationPerPage,
   getOlderOrNewerItemDate,
@@ -14,16 +15,21 @@ import { EmptyCards } from '../components/cards/EmptyCards'
 import { EventCards, EventCardsProps } from '../components/cards/EventCards'
 import { GenericMessageWithButtonView } from '../components/cards/GenericMessageWithButtonView'
 import { NoTokenView } from '../components/cards/NoTokenView'
+import { Button } from '../components/common/Button'
 import { ButtonLink } from '../components/common/ButtonLink'
+import { Spacer } from '../components/common/Spacer'
 import { useColumn } from '../hooks/use-column'
 import { useColumnData } from '../hooks/use-column-data'
 import { useGitHubAPI } from '../hooks/use-github-api'
 import { useReduxState } from '../hooks/use-redux-state'
+import { useLoginHelpers } from '../components/context/LoginHelpersContext'
 import * as github from '../libs/github'
 import * as actions from '../redux/actions'
 import * as selectors from '../redux/selectors'
 import { sharedStyles } from '../styles/shared'
 import { getGitHubAppInstallUri } from '../utils/helpers/shared'
+import { contentPadding } from '../styles/variables'
+import { QuickFeedbackRow } from '../components/common/QuickFeedbackRow'
 
 export interface EventCardsContainerProps
   extends Omit<
@@ -44,6 +50,13 @@ export const EventCardsContainer = React.memo(
   (props: EventCardsContainerProps) => {
     const { columnId, ...otherProps } = props
 
+    const {
+      addPersonalAccessToken,
+      isExecutingOAuth,
+      isLoggingIn,
+      patLoadingState,
+    } = useLoginHelpers()
+
     const appToken = useReduxState(selectors.appTokenSelector)
     const githubAppToken = useReduxState(selectors.githubAppTokenSelector)
     const githubToken = useReduxState(selectors.githubTokenSelector)
@@ -56,7 +69,14 @@ export const EventCardsContainer = React.memo(
           selectors.createColumnSubscriptionSelector()(state, columnId),
         [columnId],
       ),
-    ) as ActivityColumnSubscription | undefined
+    )
+    const subscriptions = useReduxState(
+      useCallback(
+        (state) =>
+          selectors.createColumnSubscriptionsSelector()(state, columnId),
+        [columnId],
+      ),
+    )
 
     const data = mainSubscription && mainSubscription.data
 
@@ -80,9 +100,11 @@ export const EventCardsContainer = React.memo(
       selectors.installationsLoadStateSelector,
     )
 
-    const { allItems, filteredItemsIds, getItemByNodeIdOrId } = useColumnData<
-      EnhancedGitHubEvent
-    >(columnId, { mergeSimilar: false })
+    const {
+      allItems,
+      filteredItemsIds,
+      getItemByNodeIdOrId,
+    } = useColumnData<EnhancedGitHubEvent>(columnId, { mergeSimilar: false })
 
     const clearedAt = column && column.filters && column.filters.clearedAt
     const olderDate = getOlderOrNewerItemDate('activity', 'older', allItems)
@@ -139,6 +161,12 @@ export const EventCardsContainer = React.memo(
 
     if (!mainSubscription) return null
 
+    const ENABLE_GITHUB_APP_SUPPORT =
+      constants.ENABLE_GITHUB_APP_SUPPORT &&
+      !subscriptions.find((s) => ['USER_ORG_EVENTS'].includes(s.subtype || ''))
+    const ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT =
+      constants.ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT
+
     if (!(appToken && githubToken)) {
       return <NoTokenView githubAppType={githubAppToken ? 'oauth' : 'both'} />
     }
@@ -170,30 +198,78 @@ export const EventCardsContainer = React.memo(
                 sharedStyles.flex,
                 sharedStyles.center,
                 sharedStyles.padding,
+                { paddingBottom: contentPadding / 2 },
               ]}
             >
               <GenericMessageWithButtonView
                 buttonView={
-                  <ButtonLink
-                    analyticsLabel="setup_github_app_from_column"
-                    children="Install GitHub App"
-                    disabled={
-                      mainSubscription.data.loadState === 'loading' ||
-                      mainSubscription.data.loadState === 'loading_first'
-                    }
-                    href={getGitHubAppInstallUri({
-                      suggestedTargetId: ownerResponse.data.id,
-                    })}
-                    loading={
-                      installationsLoadState === 'loading' ||
-                      mainSubscription.data.loadState === 'loading' ||
-                      mainSubscription.data.loadState === 'loading_first'
-                    }
-                    openOnNewTab={false}
-                  />
+                  <>
+                    {ENABLE_GITHUB_APP_SUPPORT && (
+                      <ButtonLink
+                        analyticsLabel="setup_github_app_from_column"
+                        disabled={
+                          mainSubscription.data.loadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading_first'
+                        }
+                        href={getGitHubAppInstallUri({
+                          suggestedTargetId: ownerResponse.data.id,
+                        })}
+                        loading={
+                          installationsLoadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading_first'
+                        }
+                        openOnNewTab={false}
+                      >
+                        Install GitHub App
+                      </ButtonLink>
+                    )}
+
+                    {ENABLE_GITHUB_APP_SUPPORT &&
+                      ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT && (
+                        <Spacer height={contentPadding / 2} />
+                      )}
+
+                    {ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT && (
+                      <Button
+                        analyticsLabel="setup_github_pat_from_column"
+                        disabled={
+                          mainSubscription.data.loadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading_first'
+                        }
+                        loading={
+                          installationsLoadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading' ||
+                          mainSubscription.data.loadState === 'loading_first' ||
+                          patLoadingState === 'adding' ||
+                          isLoggingIn ||
+                          isExecutingOAuth
+                        }
+                        onPress={() => {
+                          void addPersonalAccessToken()
+                        }}
+                      >
+                        Add Personal Access Token
+                      </Button>
+                    )}
+                  </>
                 }
                 emoji="lock"
-                subtitle="Install the GitHub App to unlock private access. No code permission required."
+                footer={<QuickFeedbackRow />}
+                subtitle={
+                  ENABLE_GITHUB_APP_SUPPORT ||
+                  ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT
+                    ? `${capitalizeFirstLetter(
+                        [
+                          ENABLE_GITHUB_APP_SUPPORT && 'install the GitHub App',
+                          ENABLE_GITHUB_PERSONAL_ACCESS_TOKEN_SUPPORT &&
+                            'add a Personal Access Token',
+                        ]
+                          .filter(Boolean)
+                          .join(' or '),
+                      )} to unlock private access.`
+                    : 'You may need the "repo" permission scope. Please try logging in again or contact us if this persists.'
+                }
                 title="Private repository?"
               />
             </View>

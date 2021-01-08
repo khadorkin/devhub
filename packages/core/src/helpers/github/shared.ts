@@ -69,26 +69,26 @@ import {
   getRepoUrlFromFullName,
 } from './url'
 
-const GITHUB_USERNAME_REGEX_PATTERN =
+export const GITHUB_USERNAME_REGEX_PATTERN =
   '[a-zA-Z\\d](?:[a-zA-Z\\d]|-(?=[a-zA-Z\\d])){0,38}'
 export const GITHUB_USERNAME_REGEX = new RegExp(
   `^${GITHUB_USERNAME_REGEX_PATTERN}$`,
   '',
 )
 
-const GITHUB_REPO_NAME_REGEX_PATTERN = '[a-zA-Z\\d._-]+'
+export const GITHUB_REPO_NAME_REGEX_PATTERN = '[a-zA-Z\\d._-]+'
 export const GITHUB_REPO_NAME_REGEX = new RegExp(
   `^${GITHUB_REPO_NAME_REGEX_PATTERN}$`,
   '',
 )
 
-const GITHUB_REPO_FULL_NAME_FORMAT_REGEX_PATTERN = '([^/]+)\\/([^/]+)'
+export const GITHUB_REPO_FULL_NAME_FORMAT_REGEX_PATTERN = '([^/]+)\\/([^/]+)'
 export const GITHUB_REPO_FULL_NAME_FORMAT_REGEX = new RegExp(
   `^${GITHUB_REPO_FULL_NAME_FORMAT_REGEX_PATTERN}$`,
   '',
 )
 
-const GITHUB_REPO_FULL_NAME_REGEX_PATTERN = `(${GITHUB_USERNAME_REGEX_PATTERN})\\/(${GITHUB_REPO_NAME_REGEX_PATTERN})`
+export const GITHUB_REPO_FULL_NAME_REGEX_PATTERN = `(${GITHUB_USERNAME_REGEX_PATTERN})\\/(${GITHUB_REPO_NAME_REGEX_PATTERN})`
 export const GITHUB_REPO_FULL_NAME_REGEX = new RegExp(
   `^${GITHUB_REPO_FULL_NAME_REGEX_PATTERN}$`,
   '',
@@ -430,49 +430,49 @@ export function getUniqueIdForSubscription(subscription: {
         }
 
         case 'REPO_EVENTS': {
-          const { owner, repo } = s.params!
+          const { owner, repo } = s.params
           if (!(owner && repo)) throw new Error('Required params: owner, repo')
           return `/repos/${owner}/${repo}/events`.toLowerCase()
         }
 
         case 'REPO_NETWORK_EVENTS': {
-          const { owner, repo } = s.params!
+          const { owner, repo } = s.params
           if (!(owner && repo)) throw new Error('Required params: owner, repo')
           return `/networks/${owner}/${repo}/events`.toLowerCase()
         }
 
         case 'ORG_PUBLIC_EVENTS': {
-          const { org } = s.params!
+          const { org } = s.params
           if (!org) throw new Error('Required params: org')
           return `/orgs/${org}/events`.toLowerCase()
         }
 
         case 'USER_RECEIVED_EVENTS': {
-          const { username } = s.params!
+          const { username } = s.params
           if (!username) throw new Error('Required params: username')
           return `/users/${username}/received_events`.toLowerCase()
         }
 
         case 'USER_RECEIVED_PUBLIC_EVENTS': {
-          const { username } = s.params!
+          const { username } = s.params
           if (!username) throw new Error('Required params: username')
           return `/users/${username}/received_events/public`.toLowerCase()
         }
 
         case 'USER_EVENTS': {
-          const { username } = s.params!
+          const { username } = s.params
           if (!username) throw new Error('Required params: username')
           return `/users/${username}/events`.toLowerCase()
         }
 
         case 'USER_PUBLIC_EVENTS': {
-          const { username } = s.params!
+          const { username } = s.params
           if (!username) throw new Error('Required params: username')
           return `/users/${username}/events/public`.toLowerCase()
         }
 
         case 'USER_ORG_EVENTS': {
-          const { org, username } = s.params!
+          const { org, username } = s.params
           if (!(username && org))
             throw new Error('Required params: username, org')
           return `/users/${username}/events/orgs/${org}`.toLowerCase()
@@ -508,7 +508,7 @@ export function getUniqueIdForSubscription(subscription: {
 
       switch (s.subtype) {
         case 'REPO_NOTIFICATIONS': {
-          const { owner, repo } = s.params!
+          const { owner, repo } = s.params
           if (!(owner && repo)) throw new Error('Required params: owner, repo')
           return `/repos/${owner}/${repo}/notifications${querystring}`.toLowerCase()
         }
@@ -576,7 +576,7 @@ export function getColumnHeaderDetails(
                 { baseURL },
                 getPixelSizeForLayoutSizeFn,
               ),
-              linkURL: getUserURLFromLogin(s.params!.org!, { baseURL })!,
+              linkURL: getUserURLFromLogin(s.params!.org, { baseURL })!,
               type: 'org',
             },
             icon: { family: 'octicon', name: 'organization' },
@@ -682,14 +682,14 @@ export function getColumnHeaderDetails(
                 { baseURL },
                 getPixelSizeForLayoutSizeFn,
               ),
-              linkURL: getUserURLFromLogin(s.params!.org!, { baseURL })!,
+              linkURL: getUserURLFromLogin(s.params!.org, { baseURL })!,
               type: 'org',
             },
             icon: { family: 'octicon', name: 'organization' },
             owner: s.params!.org,
             ownerIsKnown: true,
             repoIsKnown: false,
-            subtitle: 'Activity',
+            subtitle: 'Dashboard',
             title: s.params!.org,
             mainSubscriptionSubtype: subscription.subtype,
           }
@@ -934,7 +934,7 @@ export function createSubscriptionObjectWithId<
 }
 
 export function createSubscriptionObjectsWithId<
-  S extends Array<Pick<ColumnSubscription, 'type' | 'subtype' | 'params'>>
+  S extends Pick<ColumnSubscription, 'type' | 'subtype' | 'params'>[]
 >(subscriptions: S) {
   return subscriptions.map((subscription) => ({
     ...subscription,
@@ -1273,16 +1273,16 @@ export function getItemOwnersAndRepos(
   type: ColumnSubscription['type'],
   item: EnhancedItem | undefined,
   { includeFork }: { includeFork?: boolean } = {},
-): Array<{ owner: string; repo: string }> {
+): { owner: string; repo: string }[] {
   const mapResult: Record<string, any> = {}
 
   function mapToResult(map: Record<string, any>) {
     return Object.keys(map)
       .map((repoFullName) => getOwnerAndRepo(repoFullName))
-      .filter((or) => !!(or.owner && or.repo)) as Array<{
+      .filter((or) => !!(or.owner && or.repo)) as {
       owner: string
       repo: string
-    }>
+    }[]
   }
 
   function addOwnerAndRepo(
@@ -1659,10 +1659,10 @@ export function getItemsFilterMetadata(
           updateNestedCounter(result.owners[or.owner]!.metadata!)
 
           if (or.repo) {
-            result.owners[or.owner].repos![or.repo] =
-              result.owners[or.owner].repos![or.repo] ||
+            result.owners[or.owner].repos[or.repo] =
+              result.owners[or.owner].repos[or.repo] ||
               getDefaultItemFilterCountMetadata()
-            updateNestedCounter(result.owners[or.owner].repos![or.repo]!)
+            updateNestedCounter(result.owners[or.owner].repos[or.repo]!)
           }
         }
       })

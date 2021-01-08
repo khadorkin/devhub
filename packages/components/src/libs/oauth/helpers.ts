@@ -117,7 +117,7 @@ export const listenForNextMessageData = (
     }, 120 * 1000)
 
     if (popup) {
-      const onClosePopup = async () => {
+      const onClosePopup = () => {
         // the close may be detected before the postMessage
         if (!(popup.closed && !finished)) return
 
@@ -130,8 +130,8 @@ export const listenForNextMessageData = (
       // reliable cross-browser way to check if popup was closed
       const timer = setInterval(() => {
         if (popup.closed) {
-          onClosePopup()
           clearInterval(timer)
+          setTimeout(onClosePopup, 500)
         } else if (finished) {
           clearInterval(timer)
         }

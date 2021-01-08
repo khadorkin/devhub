@@ -1,7 +1,5 @@
 import { constants, GitHubAppType, tryParseOAuthParams } from '@devhub/core'
-import axios from 'axios'
-import _ from 'lodash'
-import React, { useCallback, useState } from 'react'
+import React, { useState } from 'react'
 import { Alert, View } from 'react-native'
 import { useDispatch } from 'react-redux'
 
@@ -13,7 +11,6 @@ import * as actions from '../../redux/actions'
 import * as selectors from '../../redux/selectors'
 import { sharedStyles } from '../../styles/shared'
 import { contentPadding, scaleFactor } from '../../styles/variables'
-import { getDefaultDevHubHeaders } from '../../utils/api'
 import { clearOAuthQueryParams } from '../../utils/helpers/auth'
 import { ModalColumn } from '../columns/ModalColumn'
 import { Avatar } from '../common/Avatar'
@@ -25,6 +22,7 @@ import { DialogConsumer } from '../context/DialogContext'
 import { useAppLayout } from '../context/LayoutContext'
 import { ThemedIcon } from '../themed/ThemedIcon'
 import { ThemedText } from '../themed/ThemedText'
+import { PrivateAccessSettings } from '../widgets/PrivateAccessSettings'
 
 export interface AdvancedSettingsModalProps {
   showBackButton: boolean
@@ -39,17 +37,12 @@ export const AdvancedSettingsModal = React.memo(
     const [executingOAuth, setExecutingOAuth] = useState<GitHubAppType | null>(
       null,
     )
-    const [isRemovingPersonalToken, setIsRemovingPersonalToken] = useState(
-      false,
-    )
+    const [] = useState(false)
 
     const dispatch = useDispatch()
     const existingAppToken = useReduxState(selectors.appTokenSelector)
     const githubAppToken = useReduxState(selectors.githubAppTokenSelector)
     const githubToken = useReduxState(selectors.githubTokenSelector)
-    const githubPersonalTokenDetails = useReduxState(
-      selectors.githubPersonalTokenDetailsSelector,
-    )
     const installations = useReduxState(selectors.installationsArrSelector)
     const installationsLoadState = useReduxState(
       selectors.installationsLoadStateSelector,
@@ -86,53 +79,6 @@ export const AdvancedSettingsModal = React.memo(
       }
     }
 
-    const removePersonalAccessToken = useCallback(async () => {
-      try {
-        setIsRemovingPersonalToken(true)
-
-        const response = await axios.post(
-          constants.GRAPHQL_ENDPOINT,
-          {
-            query: `
-              mutation {
-                removeGitHubPersonalToken
-              }`,
-          },
-          { headers: getDefaultDevHubHeaders({ appToken: existingAppToken }) },
-        )
-
-        const { data, errors } = await response.data
-
-        if (errors && errors[0] && errors[0].message)
-          throw new Error(errors[0].message)
-
-        if (!(data && data.removeGitHubPersonalToken)) {
-          throw new Error('Not removed.')
-        }
-
-        setIsRemovingPersonalToken(false)
-
-        dispatch(
-          actions.replacePersonalTokenDetails({
-            tokenDetails: undefined,
-          }),
-        )
-
-        dispatch(actions.logout())
-
-        return true
-      } catch (error) {
-        console.error(error)
-        bugsnag.notify(error)
-
-        setIsRemovingPersonalToken(false)
-        Alert.alert(
-          `Failed to remove personal token. \nError: ${error.message}`,
-        )
-        return false
-      }
-    }, [existingAppToken])
-
     const { foregroundThemeColor } = getButtonColors()
 
     return (
@@ -145,225 +91,116 @@ export const AdvancedSettingsModal = React.memo(
         <DialogConsumer>
           {(Dialog) => (
             <>
-              {Platform.OS === 'web' && (
-                <SubHeader title="Keyboard shortcuts">
-                  <>
-                    <Spacer flex={1} />
-
-                    <Button
-                      analyticsLabel="show_keyboard_shortcuts"
-                      contentContainerStyle={{
-                        width: 52 * scaleFactor,
-                        paddingHorizontal: contentPadding,
-                      }}
-                      onPress={() =>
-                        dispatch(
-                          actions.pushModal({ name: 'KEYBOARD_SHORTCUTS' }),
-                        )
-                      }
-                      size={32 * scaleFactor}
-                    >
-                      <ThemedIcon
-                        family="octicon"
-                        name="keyboard"
-                        color={foregroundThemeColor}
-                        size={16 * scaleFactor}
-                      />
-                    </Button>
-                  </>
-                </SubHeader>
-              )}
+              <PrivateAccessSettings />
 
               <View>
-                {!!(
-                  githubPersonalTokenDetails && githubPersonalTokenDetails.token
-                ) && (
-                  <>
-                    <View>
-                      <SubHeader title="Personal Access Token">
-                        <Spacer flex={1} />
+                {constants.ENABLE_GITHUB_OAUTH_SUPPORT && (
+                  <SubHeader title="Manage GitHub OAuth">
+                    <>
+                      <Spacer flex={1} />
 
-                        {!!(
-                          githubPersonalTokenDetails &&
-                          githubPersonalTokenDetails.token
-                        ) && (
-                          <Button
-                            analyticsLabel="remove_personal_access_token"
-                            contentContainerStyle={{
-                              width: 52 * scaleFactor,
-                              paddingHorizontal: contentPadding,
-                            }}
-                            disabled={isRemovingPersonalToken}
-                            loading={isRemovingPersonalToken}
-                            onPress={() => {
-                              removePersonalAccessToken()
-                            }}
-                            size={32 * scaleFactor}
-                            type="danger"
-                          >
-                            <ThemedIcon
-                              color={foregroundThemeColor}
-                              family="octicon"
-                              name="trashcan"
-                              size={16 * scaleFactor}
-                            />
-                          </Button>
-                        )}
-                      </SubHeader>
-
-                      <View
-                        style={[
-                          sharedStyles.horizontal,
-                          sharedStyles.alignItemsCenter,
-                          sharedStyles.paddingHorizontal,
-                        ]}
-                      >
-                        <ThemedText
-                          color="foregroundColorMuted65"
-                          style={sharedStyles.flex}
+                      {githubToken ? (
+                        <ButtonLink
+                          analyticsLabel="manage_oauth"
+                          contentContainerStyle={{
+                            width: 52 * scaleFactor,
+                            paddingHorizontal: contentPadding,
+                          }}
+                          href={`${constants.API_BASE_URL}/github/oauth/manage`}
+                          openOnNewTab
+                          size={32 * scaleFactor}
                         >
-                          {new Array(githubPersonalTokenDetails.token.length)
-                            .fill('*')
-                            .join('')}
-                        </ThemedText>
-                      </View>
-                    </View>
-
-                    <Spacer height={contentPadding} />
-                  </>
+                          <ThemedIcon
+                            color={foregroundThemeColor}
+                            family="octicon"
+                            name="tools"
+                            size={16 * scaleFactor}
+                          />
+                        </ButtonLink>
+                      ) : (
+                        <Button
+                          analyticsLabel={
+                            githubToken ? 'refresh_oauth_token' : 'start_oauth'
+                          }
+                          contentContainerStyle={{
+                            width: 52 * scaleFactor,
+                            paddingHorizontal: contentPadding,
+                          }}
+                          disabled={!!executingOAuth}
+                          loading={executingOAuth === 'oauth'}
+                          loadingIndicatorStyle={{
+                            transform: [{ scale: 0.8 }],
+                          }}
+                          onPress={() => startOAuth('oauth')}
+                          size={32 * scaleFactor}
+                        >
+                          <ThemedIcon
+                            color={foregroundThemeColor}
+                            family="octicon"
+                            name={githubToken ? 'sync' : 'plus'}
+                            size={16 * scaleFactor}
+                          />
+                        </Button>
+                      )}
+                    </>
+                  </SubHeader>
                 )}
 
-                <View>
-                  <SubHeader title="Manage OAuth access" />
+                {constants.ENABLE_GITHUB_APP_SUPPORT && (
+                  <SubHeader title="Manage GitHub App">
+                    <>
+                      <Spacer flex={1} />
 
-                  <View
-                    style={[
-                      sharedStyles.horizontal,
-                      sharedStyles.alignItemsCenter,
-                      sharedStyles.paddingHorizontal,
-                    ]}
-                  >
-                    <ThemedText
-                      color="foregroundColor"
-                      style={sharedStyles.flex}
-                    >
-                      GitHub OAuth
-                    </ThemedText>
+                      {githubAppToken ? (
+                        <ButtonLink
+                          analyticsLabel="manage_app_oauth"
+                          contentContainerStyle={{
+                            width: 52 * scaleFactor,
+                            paddingHorizontal: contentPadding,
+                          }}
+                          href={`${constants.API_BASE_URL}/github/app/manage`}
+                          openOnNewTab
+                          size={32 * scaleFactor}
+                        >
+                          <ThemedIcon
+                            color={foregroundThemeColor}
+                            family="octicon"
+                            name="tools"
+                            size={16 * scaleFactor}
+                          />
+                        </ButtonLink>
+                      ) : (
+                        <Button
+                          analyticsLabel={
+                            githubAppToken
+                              ? 'refresh_app_oauth_token'
+                              : 'start_app_oauth'
+                          }
+                          contentContainerStyle={{
+                            width: 52 * scaleFactor,
+                            paddingHorizontal: contentPadding,
+                          }}
+                          disabled={!!executingOAuth}
+                          loading={executingOAuth === 'app'}
+                          loadingIndicatorStyle={{
+                            transform: [{ scale: 0.8 }],
+                          }}
+                          onPress={() => startOAuth('app')}
+                          size={32 * scaleFactor}
+                        >
+                          <ThemedIcon
+                            color={foregroundThemeColor}
+                            family="octicon"
+                            name={githubAppToken ? 'sync' : 'plus'}
+                            size={16 * scaleFactor}
+                          />
+                        </Button>
+                      )}
+                    </>
+                  </SubHeader>
+                )}
 
-                    <Spacer flex={1} minWidth={contentPadding / 2} />
-
-                    {githubToken ? (
-                      <ButtonLink
-                        analyticsLabel="manage_oauth"
-                        contentContainerStyle={{
-                          width: 52 * scaleFactor,
-                          paddingHorizontal: contentPadding,
-                        }}
-                        href={`${constants.API_BASE_URL}/github/oauth/manage`}
-                        openOnNewTab
-                        size={32 * scaleFactor}
-                      >
-                        <ThemedIcon
-                          color={foregroundThemeColor}
-                          family="octicon"
-                          name="tools"
-                          size={16 * scaleFactor}
-                        />
-                      </ButtonLink>
-                    ) : (
-                      <Button
-                        analyticsLabel={
-                          githubToken ? 'refresh_oauth_token' : 'start_oauth'
-                        }
-                        contentContainerStyle={{
-                          width: 52 * scaleFactor,
-                          paddingHorizontal: contentPadding,
-                        }}
-                        disabled={!!executingOAuth}
-                        loading={executingOAuth === 'oauth'}
-                        loadingIndicatorStyle={{ transform: [{ scale: 0.8 }] }}
-                        onPress={() => startOAuth('oauth')}
-                        size={32 * scaleFactor}
-                      >
-                        <ThemedIcon
-                          color={foregroundThemeColor}
-                          family="octicon"
-                          name={githubToken ? 'sync' : 'plus'}
-                          size={16 * scaleFactor}
-                        />
-                      </Button>
-                    )}
-                  </View>
-
-                  <Spacer height={contentPadding / 2} />
-
-                  <View
-                    style={[
-                      sharedStyles.horizontal,
-                      sharedStyles.alignItemsCenter,
-                      {
-                        paddingHorizontal: contentPadding,
-                      },
-                    ]}
-                  >
-                    <ThemedText
-                      color="foregroundColor"
-                      style={sharedStyles.flex}
-                    >
-                      GitHub App
-                    </ThemedText>
-
-                    <Spacer flex={1} minWidth={contentPadding / 2} />
-
-                    {githubAppToken ? (
-                      <ButtonLink
-                        analyticsLabel="manage_app_oauth"
-                        contentContainerStyle={{
-                          width: 52 * scaleFactor,
-                          paddingHorizontal: contentPadding,
-                        }}
-                        href={`${constants.API_BASE_URL}/github/app/manage`}
-                        openOnNewTab
-                        size={32 * scaleFactor}
-                      >
-                        <ThemedIcon
-                          color={foregroundThemeColor}
-                          family="octicon"
-                          name="tools"
-                          size={16 * scaleFactor}
-                        />
-                      </ButtonLink>
-                    ) : (
-                      <Button
-                        analyticsLabel={
-                          githubAppToken
-                            ? 'refresh_app_oauth_token'
-                            : 'start_app_oauth'
-                        }
-                        contentContainerStyle={{
-                          width: 52 * scaleFactor,
-                          paddingHorizontal: contentPadding,
-                        }}
-                        disabled={!!executingOAuth}
-                        loading={executingOAuth === 'app'}
-                        loadingIndicatorStyle={{ transform: [{ scale: 0.8 }] }}
-                        onPress={() => startOAuth('app')}
-                        size={32 * scaleFactor}
-                      >
-                        <ThemedIcon
-                          color={foregroundThemeColor}
-                          family="octicon"
-                          name={githubAppToken ? 'sync' : 'plus'}
-                          size={16 * scaleFactor}
-                        />
-                      </Button>
-                    )}
-                  </View>
-
-                  <Spacer height={contentPadding} />
-                </View>
-
-                {!!githubAppToken && (
+                {!!githubAppToken && constants.ENABLE_GITHUB_APP_SUPPORT && (
                   <>
                     <View>
                       <SubHeader title="GitHub App installations">
@@ -468,11 +305,42 @@ export const AdvancedSettingsModal = React.memo(
                             </View>
                           ),
                       )}
+
+                      <Spacer height={contentPadding / 2} />
                     </View>
                   </>
                 )}
 
-                <Spacer height={contentPadding} />
+                <Spacer height={contentPadding / 2} />
+
+                {Platform.OS === 'web' && (
+                  <SubHeader title="Keyboard shortcuts">
+                    <>
+                      <Spacer flex={1} />
+
+                      <Button
+                        analyticsLabel="show_keyboard_shortcuts"
+                        contentContainerStyle={{
+                          width: 52 * scaleFactor,
+                          paddingHorizontal: contentPadding,
+                        }}
+                        onPress={() =>
+                          dispatch(
+                            actions.pushModal({ name: 'KEYBOARD_SHORTCUTS' }),
+                          )
+                        }
+                        size={32 * scaleFactor}
+                      >
+                        <ThemedIcon
+                          family="octicon"
+                          name="keyboard"
+                          color={foregroundThemeColor}
+                          size={16 * scaleFactor}
+                        />
+                      </Button>
+                    </>
+                  </SubHeader>
+                )}
               </View>
 
               <Spacer flex={1} minHeight={contentPadding} />
